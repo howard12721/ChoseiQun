@@ -15,6 +15,11 @@ data class TraqBotConfig(
     val traqOrigin: String,
 )
 
+private val BOT_MENTION_PATTERN =
+    Regex("""^!\{"type":"(?:\\.|[^"\\])*","raw":"(?:\\.|[^"\\])*","id":"(?:\\.|[^"\\])*"\}""")
+
+internal fun extractBotMentionPrefix(content: String): String? = BOT_MENTION_PATTERN.find(content)?.value
+
 class TraqBotRunner(
     private val client: TraktClient,
     private val pollService: PollService,
@@ -65,17 +70,15 @@ class TraqBotRunner(
     context(botScope: BotScope)
     private suspend fun handleMessage(event: MessageCreated) {
         val content = event.message.content.trim()
-        if (!content.startsWith("chosei")) {
-            return
-        }
+        val botMentionPrefix = extractBotMentionPrefix(content) ?: return
 
         when {
-            content == "chosei" || content == "chosei help" -> {
-                event.message.channel.sendMessage(helpMessage())
+            content == botMentionPrefix -> {
+                event.message.channel.sendMessage("```\n$@調整する <イベント名>\n```で日程調整を開始します。")
             }
 
-            content.startsWith("chosei start ") -> {
-                val title = content.removePrefix("chosei start ").trim()
+            else -> {
+                val title = content.removePrefix(botMentionPrefix).trim()
                 val poll =
                     pollService.createDraftPoll(
                         CreateDraftPollCommand(
@@ -90,46 +93,13 @@ class TraqBotRunner(
                         appendLine("日程調整の設定URLです。")
                         appendLine(setupUrl)
                         appendLine()
-                        append("設定完了後、自動で元のチャンネルに結果メッセージを投稿し、その後の回答状況に合わせて更新します。")
+                        append("設定完了後、元のチャンネルにリンクを公開します。")
                     },
                 )
                 event.message.channel.sendMessage(
-                    "設定URLをDMしました。公開されるとこのチャンネルに結果メッセージを自動投稿し、その後の回答状況に合わせて更新します。",
+                    "設定URLをDMしました。",
                 )
-            }
-
-            content == "chosei list" -> {
-                val polls = pollService.listOpenPolls().take(5)
-                val response =
-                    if (polls.isEmpty()) {
-                        "公開中の日程調整はありません。"
-                    } else {
-                        buildString {
-                            appendLine("公開中の日程調整:")
-                            polls.forEachIndexed { index, poll ->
-                                appendLine("${index + 1}. ${poll.title} ${poll.participantUrl}")
-                            }
-                        }
-                    }
-                event.message.channel.sendMessage(response.trim())
-            }
-
-            else -> {
-                event.message.channel.sendMessage("`chosei help` で使い方を確認できます。")
             }
         }
     }
-
-    private fun helpMessage(): String =
-        """
-        使い方:
-        `chosei start タイトル`
-        `chosei list`
-
-        フロー:
-        1. 主催者が `chosei start ...` を送る
-        2. bot が設定URLをDMで返す
-        3. 設定完了後、結果メッセージを元チャンネルに自動投稿する
-        4. 回答が更新されるたびに同じ結果メッセージを更新する
-        """.trimIndent()
 }
