@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.22
 
-FROM eclipse-temurin:21-jdk-jammy AS build
+FROM eclipse-temurin:21.0.10_7-jdk-jammy AS build
 
 WORKDIR /workspace
 
@@ -14,7 +14,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew --no-daemon installDist
 
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:21.0.10_7-jre-jammy
 
 WORKDIR /app
 

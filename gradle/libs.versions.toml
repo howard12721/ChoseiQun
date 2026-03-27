@@ -3,8 +3,8 @@ exposed = "1.1.1"
 kotlin = "2.3.20"
 ktor = "3.4.1"
 kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.9.0"
 mysql = "3.5.7"
+kotlinx-serialization = "1.10.0"
 trakt-bot = "1.1.1"
 
 [libraries]
