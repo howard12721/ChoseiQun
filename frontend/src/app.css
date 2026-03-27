@@ -397,6 +397,21 @@ code {
   background: var(--layer-01);
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.tertiary-button:disabled,
+.tool-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.primary-button:disabled:hover,
+.secondary-button:disabled:hover,
+.tertiary-button:disabled:hover,
+.tool-button:disabled:hover {
+  background: var(--layer-02);
+}
+
 .tertiary-button {
   color: var(--accent);
   border-color: #a6c8ff;

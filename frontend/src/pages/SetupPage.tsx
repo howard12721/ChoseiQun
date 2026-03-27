@@ -87,14 +87,30 @@ export function SetupPage(props: {
             <div className="message-box url-wrap">
               {hasPublished ? poll.participantUrl : "公開後に表示されます"}
             </div>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={!hasPublished}
-              onClick={() => onCopy(poll.participantUrl)}
-            >
-              {hasPublished ? "参加者URLをコピー" : "公開後にコピーできます"}
-            </button>
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!hasPublished}
+                onClick={() => onCopy(poll.participantUrl)}
+              >
+                コピー
+              </button>
+              {hasPublished ? (
+                <a
+                  className="secondary-button"
+                  href={poll.participantUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  開く
+                </a>
+              ) : (
+                <button className="secondary-button" type="button" disabled>
+                  開く
+                </button>
+              )}
+            </div>
           </div>
         </aside>
       </section>
