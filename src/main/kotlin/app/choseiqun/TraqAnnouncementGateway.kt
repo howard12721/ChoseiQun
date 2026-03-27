@@ -7,7 +7,7 @@ import jp.xhw.trakt.bot.scope.sendMessage
 import jp.xhw.trakt.bot.scope.update
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.util.*
 import kotlin.uuid.Uuid
 
 interface PollAnnouncementGateway {
@@ -54,18 +54,8 @@ object TraqAnnouncementFormatter {
         if (poll.description.isNotBlank()) {
             lines += poll.description
         }
-        if (poll.candidateDates.isNotEmpty()) {
-            val preview =
-                poll.candidateDates
-                    .take(5)
-                    .joinToString(", ") { date ->
-                        LocalDate.parse(date).format(dateLabelFormatter)
-                    }
-            val suffix = if (poll.candidateDates.size > 5) " ほか${poll.candidateDates.size - 5}日" else ""
-            lines += "候補日: $preview$suffix"
-        }
         lines += "参加者向けリンク: $participantUrl"
-        lines += "回答者: ${summary.participantCount}人"
+        lines += "回答者: ${poll.participants.joinToString("") { ":@$it:" }}"
         if (poll.candidateDates.isNotEmpty()) {
             lines += ""
             lines += "日ごとの回答:"
@@ -74,14 +64,6 @@ object TraqAnnouncementFormatter {
                 val yesParticipants = poll.participants.filterByAvailability(date, DayAvailability.YES)
                 val maybeParticipants = poll.participants.filterByAvailability(date, DayAvailability.MAYBE)
                 lines += "$label: ${formatAvailabilityLine(yesParticipants, maybeParticipants)}"
-            }
-        }
-        if (summary.recommendedDates.isNotEmpty()) {
-            lines += ""
-            lines += "おすすめ候補:"
-            summary.recommendedDates.take(3).forEachIndexed { index, day ->
-                val label = LocalDate.parse(day.date).format(dateLabelFormatter)
-                lines += "${index + 1}. $label :o:${day.yesCount} :iketara:${day.maybeCount} :x:${day.noCount}"
             }
         }
         return lines.joinToString("\n")
