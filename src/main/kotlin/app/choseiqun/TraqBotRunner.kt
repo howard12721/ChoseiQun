@@ -74,7 +74,7 @@ class TraqBotRunner(
 
         when {
             content == botMentionPrefix -> {
-                event.message.channel.sendMessage("```\n@BOT_chosei <イベント名>```で日程調整を開始します")
+                event.message.channel.sendMessage("```\n@BOT_chosei <イベント名>\n```\nで日程調整を開始します")
             }
 
             else -> {
