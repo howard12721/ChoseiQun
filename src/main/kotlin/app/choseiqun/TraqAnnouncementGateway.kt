@@ -1,10 +1,10 @@
 package app.choseiqun
 
+import jp.xhw.trakt.bot.TraktClient
 import jp.xhw.trakt.bot.scope.fetchChannel
 import jp.xhw.trakt.bot.scope.fetchMessage
 import jp.xhw.trakt.bot.scope.sendMessage
 import jp.xhw.trakt.bot.scope.update
-import jp.xhw.trakt.bot.trakt
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -17,26 +17,9 @@ interface PollAnnouncementGateway {
     ): String?
 }
 
-class LoggingAnnouncementGateway : PollAnnouncementGateway {
-    override suspend fun publishOrUpdate(
-        poll: PollRecord,
-        content: String,
-    ): String? {
-        println("Announcement skipped for poll=${poll.id}: $content")
-        return poll.announcementMessageId
-    }
-}
-
 class TraqAnnouncementGateway(
-    private val config: TraqBotConfig,
+    private val client: TraktClient,
 ) : PollAnnouncementGateway {
-    private val client =
-        trakt(
-            token = config.token,
-            botId = config.botId,
-            origin = config.traqOrigin,
-        ) {}
-
     override suspend fun publishOrUpdate(
         poll: PollRecord,
         content: String,

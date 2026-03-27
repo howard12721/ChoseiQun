@@ -1,13 +1,12 @@
 package app.choseiqun
 
+import jp.xhw.trakt.bot.TraktClient
 import jp.xhw.trakt.bot.model.MessageCreated
 import jp.xhw.trakt.bot.scope.BotScope
 import jp.xhw.trakt.bot.scope.sendDirectMessage
 import jp.xhw.trakt.bot.scope.sendMessage
-import jp.xhw.trakt.bot.trakt
 import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.uuid.Uuid
 
 data class TraqBotConfig(
@@ -17,25 +16,22 @@ data class TraqBotConfig(
 )
 
 class TraqBotRunner(
-    private val config: TraqBotConfig,
+    private val client: TraktClient,
     private val pollService: PollService,
     private val baseUrl: String,
 ) {
     private val stopRequested = AtomicBoolean(false)
-    private val activeClient = AtomicReference<jp.xhw.trakt.bot.TraktClient?>(null)
+
+    init {
+        client.on<MessageCreated> { event ->
+            handleMessage(event)
+        }
+    }
 
     suspend fun run() {
         stopRequested.set(false)
 
         while (!stopRequested.get()) {
-            val client =
-                trakt(token = config.token, botId = config.botId, origin = config.traqOrigin) {
-                    on<MessageCreated> { event ->
-                        handleMessage(event)
-                    }
-                }
-            activeClient.set(client)
-
             try {
                 client.start()
                 if (!stopRequested.get()) {
@@ -47,14 +43,12 @@ class TraqBotRunner(
                     error.printStackTrace()
                 }
             } finally {
-                if (activeClient.compareAndSet(client, null)) {
-                    runCatching { client.stop() }
-                        .onFailure {
-                            if (!stopRequested.get()) {
-                                println("Failed to stop traQ bot client cleanly: ${it.message}")
-                            }
+                runCatching { client.stop() }
+                    .onFailure {
+                        if (!stopRequested.get()) {
+                            println("Failed to stop traQ bot client cleanly: ${it.message}")
                         }
-                }
+                    }
             }
 
             if (!stopRequested.get()) {
@@ -65,7 +59,7 @@ class TraqBotRunner(
 
     suspend fun stop() {
         stopRequested.set(true)
-        activeClient.getAndSet(null)?.stop()
+        client.stop()
     }
 
     context(botScope: BotScope)

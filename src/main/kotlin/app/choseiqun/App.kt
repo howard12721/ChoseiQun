@@ -2,6 +2,7 @@ package app.choseiqun
 
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
+import jp.xhw.trakt.bot.trakt
 import kotlinx.coroutines.runBlocking
 import java.net.URI
 import kotlin.uuid.Uuid
@@ -12,8 +13,12 @@ fun main() {
     runBlocking {
         repository.initialize()
     }
-    val announcementGateway =
+    val traqClient =
         config.botConfig?.let {
+            trakt(token = it.token, botId = it.botId, origin = it.traqOrigin) {}
+        }
+    val announcementGateway =
+        traqClient?.let {
             TraqAnnouncementGateway(it)
         }
     val pollService =
@@ -24,7 +29,7 @@ fun main() {
             announcementGateway = announcementGateway,
         )
     val botRunner =
-        config.botConfig?.let {
+        traqClient?.let {
             TraqBotRunner(it, pollService, config.publicBaseUrl)
         }
     val server =
