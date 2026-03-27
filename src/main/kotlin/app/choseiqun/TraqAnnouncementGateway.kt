@@ -55,7 +55,7 @@ object TraqAnnouncementFormatter {
             lines += poll.description
         }
         lines += "参加者向けリンク: $participantUrl"
-        lines += "回答者: ${poll.participants.joinToString("") { ":@$it:" }}"
+        lines += "回答者: ${poll.participants.map { it.traqId }.joinToString("") { ":@$it:" }}"
         if (poll.candidateDates.isNotEmpty()) {
             lines += ""
             lines += "日ごとの回答:"
