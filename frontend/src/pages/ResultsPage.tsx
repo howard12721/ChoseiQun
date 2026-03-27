@@ -65,11 +65,6 @@ export function ResultsPage(props: {
 
       <section className="results-stack">
         <div className="dashboard-card stack">
-          <div className="button-row">
-            <a className="secondary-button button-link" href={`/polls/${poll.id}`}>
-              入力ページへ戻る
-            </a>
-          </div>
           <div className="section-head">
             <h2>日別集計</h2>
             <span className="count-badge">{sortedDates.length}日</span>
@@ -157,6 +152,11 @@ export function ResultsPage(props: {
           ) : (
             <div className="empty-state">まだ回答はありません。</div>
           )}
+          <div className="button-row">
+            <a className="secondary-button button-link" href={`/polls/${poll.id}`}>
+              入力ページへ戻る
+            </a>
+          </div>
         </div>
 
         <section className="results-comments-layout">

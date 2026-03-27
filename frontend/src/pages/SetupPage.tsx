@@ -1,6 +1,5 @@
 import type { SetupSelection } from "../app/types";
 import { CalendarMonth, SelectedDatesPanel } from "../components/CalendarMonth";
-import { MetricCard } from "../components/MetricCard";
 import type { PollDetail } from "../types";
 
 export function SetupPage(props: {
@@ -22,10 +21,6 @@ export function SetupPage(props: {
         <span className="eyebrow">Organizer Setup</span>
         <h1>初期設定画面</h1>
         <p>候補日と概要を入力してください</p>
-      </section>
-
-      <section className="metrics-grid metrics-grid--single">
-        <MetricCard label="State" value={hasPublished ? "OPEN" : "DRAFT"} hint="公開状態" accent={hasPublished} />
       </section>
 
       <section className="dashboard-layout">
@@ -81,8 +76,10 @@ export function SetupPage(props: {
         <aside className="dashboard-column">
           <div className="dashboard-card stack">
             <div className="section-head">
-              <h2>公開用URL</h2>
-              <span className="count-badge">{hasPublished ? "OPEN" : "DRAFT"}</span>
+              <div className="stack tight">
+                <h2>公開用URL</h2>
+                <p className="section-caption">{hasPublished ? "公開中です" : "設定完了後に公開されます"}</p>
+              </div>
             </div>
             <div className="message-box url-wrap">
               {hasPublished ? poll.participantUrl : "公開後に表示されます"}
