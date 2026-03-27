@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { isStubMode } from "../api";
 import type { AppRoute } from "../app/types";
 import { routeKindLabel } from "../utils/ui";
 
@@ -21,7 +20,6 @@ export function Shell({
         </div>
         <div className="shell-meta">
           <span className="shell-chip">{routeKindLabel(routeKind)}</span>
-          {isStubMode ? <span className="shell-chip shell-chip--accent">UI Stub Mode</span> : null}
         </div>
       </header>
       <main className="shell-content">
