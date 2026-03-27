@@ -53,8 +53,9 @@ export function bestSummaryDay(poll: PollDetail) {
 }
 
 export function participantCommentsForDisplay(participant: ParticipantResponse) {
-  if (participant.comments.length) {
-    return participant.comments;
+  const comments = participant.comments ?? [];
+  if (comments.length) {
+    return comments;
   }
   return participant.note
     ? [{ body: participant.note, createdAt: participant.updatedAt }]

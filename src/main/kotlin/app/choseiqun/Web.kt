@@ -19,6 +19,7 @@ fun Application.configureHttp(pollService: PollService) {
         Json {
             ignoreUnknownKeys = true
             prettyPrint = true
+            encodeDefaults = true
         }
 
     install(DefaultHeaders)
@@ -91,7 +92,7 @@ fun Application.configureHttp(pollService: PollService) {
     }
 }
 
-private fun io.ktor.server.application.ApplicationCall.forwardedTraqId(): String? =
+private fun ApplicationCall.forwardedTraqId(): String? =
     request.headers["X-Forwarded-User"]?.trim()?.takeIf {
         it.isNotBlank()
     }
