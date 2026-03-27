@@ -16,7 +16,7 @@ data class TraqBotConfig(
 )
 
 private val BOT_MENTION_PATTERN =
-    Regex("""^!\{"type":"(?:\\.|[^"\\])*","raw":"(?:\\.|[^"\\])*","id":"(?:\\.|[^"\\])*"\}""")
+    Regex("""^!\{"type":"user","raw":"(?:\\.|[^"\\])*","id":"019d2e1e-a0f8-724a-830a-46678645aab6"\}""")
 
 internal fun extractBotMentionPrefix(content: String): String? = BOT_MENTION_PATTERN.find(content)?.value
 
@@ -74,7 +74,7 @@ class TraqBotRunner(
 
         when {
             content == botMentionPrefix -> {
-                event.message.channel.sendMessage("```\n$@調整する <イベント名>\n```で日程調整を開始します。")
+                event.message.channel.sendMessage("```\n@BOT_chosei <イベント名>```で日程調整を開始します")
             }
 
             else -> {
