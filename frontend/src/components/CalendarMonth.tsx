@@ -60,6 +60,13 @@ export function CalendarMonth(props: {
     applyRangeSelection(date);
   }
 
+  function findSetupDateAtPoint(container: HTMLElement, clientX: number, clientY: number) {
+    const target = container.ownerDocument
+      .elementFromPoint(clientX, clientY)
+      ?.closest<HTMLElement>("[data-setup-date]");
+    return target?.dataset.setupDate;
+  }
+
   return (
     <section className="month-card">
       <div className="month-card__header">
@@ -92,8 +99,7 @@ export function CalendarMonth(props: {
       <div
         className="month-grid"
         onPointerMove={(event) => {
-          const target = (event.target as HTMLElement).closest<HTMLElement>("[data-setup-date]");
-          const date = target?.dataset.setupDate;
+          const date = findSetupDateAtPoint(event.currentTarget, event.clientX, event.clientY);
           if (date) {
             applyRangeSelection(date);
           }
