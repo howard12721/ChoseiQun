@@ -28,7 +28,7 @@ export function SetupPage(props: {
         <MetricCard label="State" value={hasPublished ? "OPEN" : "DRAFT"} hint="公開状態" accent={hasPublished} />
       </section>
 
-      <section className={hasPublished ? "dashboard-layout" : "stack"}>
+      <section className="dashboard-layout">
         <form
           className="dashboard-card stack"
           onSubmit={(event) => {
@@ -78,20 +78,25 @@ export function SetupPage(props: {
           </div>
         </form>
 
-        {hasPublished ? (
-          <aside className="dashboard-column">
-            <div className="dashboard-card stack">
-              <div className="section-head">
-                <h2>公開済み</h2>
-                <span className="count-badge">OPEN</span>
-              </div>
-              <div className="message-box url-wrap">{poll.participantUrl}</div>
-              <button className="secondary-button" type="button" onClick={() => onCopy(poll.participantUrl)}>
-                参加者URLをコピー
-              </button>
+        <aside className="dashboard-column">
+          <div className="dashboard-card stack">
+            <div className="section-head">
+              <h2>公開用URL</h2>
+              <span className="count-badge">{hasPublished ? "OPEN" : "DRAFT"}</span>
             </div>
-          </aside>
-        ) : null}
+            <div className="message-box url-wrap">
+              {hasPublished ? poll.participantUrl : "公開後に表示されます"}
+            </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!hasPublished}
+              onClick={() => onCopy(poll.participantUrl)}
+            >
+              {hasPublished ? "参加者URLをコピー" : "公開後にコピーできます"}
+            </button>
+          </div>
+        </aside>
       </section>
     </>
   );
