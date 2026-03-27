@@ -9,7 +9,7 @@ export function HomePage({ openPolls, onCopy }: { openPolls: PollListItem[]; onC
         <h1>調整くん</h1>
         <p><code>chosei start イベント名</code> で日程調整を開始</p>
         <div className="button-row">
-          <button className="primary-button" type="button" onClick={() => onCopy("chosei start 研究室MTG")}>
+          <button className="primary-button" type="button" onClick={() => onCopy("chosei start イベント名")}>
             コマンドをコピー
           </button>
         </div>
