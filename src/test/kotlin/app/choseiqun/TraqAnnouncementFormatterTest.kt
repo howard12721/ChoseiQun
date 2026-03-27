@@ -2,6 +2,7 @@ package app.choseiqun
 
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.uuid.Uuid
 
 class TraqAnnouncementFormatterTest {
     @Test
@@ -15,7 +16,7 @@ class TraqAnnouncementFormatterTest {
                 createdAt = "2024-03-01T00:00:00Z",
                 updatedAt = "2024-03-01T00:00:00Z",
                 organizerUserId = "organizer",
-                traqChannelId = "channel-id",
+                traqChannelId = Uuid.parse("0199bd73-6e35-7c81-9d8e-7b0d243ad4ac"),
                 participants =
                     listOf(
                         ParticipantRecord(

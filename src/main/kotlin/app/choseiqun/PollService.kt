@@ -326,7 +326,7 @@ class PollService(
 
     private suspend fun syncAnnouncement(poll: PollRecord): PollRecord {
         val gateway = announcementGateway ?: return poll
-        if (poll.state != PollState.OPEN || poll.traqChannelId.isNullOrBlank()) {
+        if (poll.state != PollState.OPEN || poll.traqChannelId == null) {
             return poll
         }
 
@@ -423,7 +423,7 @@ private fun PollRecord.toDetailResponse(
             } else {
                 null
             },
-        announcementMessageId = announcementMessageId,
+        announcementMessageId = announcementMessageId?.toString(),
         viewerTraqId = viewerTraqId,
         viewerIconUrl = viewerTraqId?.let { traqIconUrl(traqBaseUrl, it) },
         participants =

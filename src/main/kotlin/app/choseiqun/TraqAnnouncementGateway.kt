@@ -14,7 +14,7 @@ interface PollAnnouncementGateway {
     suspend fun publishOrUpdate(
         poll: PollRecord,
         content: String,
-    ): String?
+    ): Uuid?
 }
 
 class TraqAnnouncementGateway(
@@ -23,16 +23,16 @@ class TraqAnnouncementGateway(
     override suspend fun publishOrUpdate(
         poll: PollRecord,
         content: String,
-    ): String? {
-        var messageId: String? = poll.announcementMessageId
+    ): Uuid? {
+        var messageId: Uuid? = poll.announcementMessageId
         client.execute {
-            if (poll.announcementMessageId.isNullOrBlank()) {
+            if (poll.announcementMessageId == null) {
                 val channelId = poll.traqChannelId ?: return@execute
-                val channel = fetchChannel(Uuid.parse(channelId))
+                val channel = fetchChannel(channelId)
                 val message = channel.sendMessage(content)
-                messageId = message.id.toString()
+                messageId = message.id.value
             } else {
-                val message = fetchMessage(Uuid.parse(poll.announcementMessageId))
+                val message = fetchMessage(poll.announcementMessageId)
                 message.update(content)
             }
         }

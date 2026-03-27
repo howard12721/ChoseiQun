@@ -216,8 +216,8 @@ private object Polls : Table("polls") {
     val createdAt = varchar("created_at", 64)
     val updatedAt = varchar("updated_at", 64)
     val organizerUserId = varchar("organizer_user_id", 255)
-    val traqChannelId = varchar("traq_channel_id", 255).nullable()
-    val announcementMessageId = varchar("announcement_message_id", 255).nullable()
+    val traqChannelId = uuid("traq_channel_id").nullable()
+    val announcementMessageId = uuid("announcement_message_id").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

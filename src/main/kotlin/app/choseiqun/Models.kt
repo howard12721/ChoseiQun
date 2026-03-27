@@ -1,6 +1,7 @@
 package app.choseiqun
 
 import kotlinx.serialization.Serializable
+import kotlin.uuid.Uuid
 
 @Serializable
 enum class PollState {
@@ -43,8 +44,8 @@ data class PollRecord(
     val createdAt: String,
     val updatedAt: String,
     val organizerUserId: String,
-    val traqChannelId: String? = null,
-    val announcementMessageId: String? = null,
+    val traqChannelId: Uuid? = null,
+    val announcementMessageId: Uuid? = null,
     val participants: List<ParticipantRecord> = emptyList(),
 )
 
@@ -57,7 +58,7 @@ data class ApiError(
 data class CreateDraftPollCommand(
     val title: String,
     val organizerUserId: String,
-    val traqChannelId: String,
+    val traqChannelId: Uuid,
 )
 
 @Serializable

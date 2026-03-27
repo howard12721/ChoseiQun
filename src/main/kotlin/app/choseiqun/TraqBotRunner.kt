@@ -81,7 +81,7 @@ class TraqBotRunner(
                         CreateDraftPollCommand(
                             title = title.ifBlank { "日程調整" },
                             organizerUserId = event.message.authorId.toString(),
-                            traqChannelId = event.message.channelId.toString(),
+                            traqChannelId = event.message.channelId.value,
                         ),
                     )
                 val setupUrl = "${baseUrl.trimEnd('/')}/setup/${poll.id}?token=${poll.setupToken}"
