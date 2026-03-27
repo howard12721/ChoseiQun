@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.22
 
 FROM eclipse-temurin:21-jdk-jammy AS build
 
