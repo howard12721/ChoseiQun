@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">ChoseiQun Icon</title>
+  <desc id="desc">A tall monochrome speech bubble and schedule grid icon for favicon use.</desc>
+
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="#edf5ff"/>
+
+  <g fill="none" stroke="#111111" stroke-linecap="round" stroke-linejoin="round">
+    <path
+      d="M76 30h104c24.301 0 44 19.699 44 44v84c0 24.301-19.699 44-44 44h-42.786l-23.271 22.336c-4.619 4.433-12.342 1.159-12.342-5.243V202H76c-24.301 0-44-19.699-44-44V74c0-24.301 19.699-44 44-44z"
+      stroke-width="12"
+    />
+
+    <rect x="68" y="62" width="120" height="104" rx="22" stroke-width="10"/>
+    <path d="M68 96h120" stroke-width="10"/>
+    <path d="M98 46v28M158 46v28" stroke-width="10"/>
+
+    <path d="M94 122h0M128 122h0M162 122h0" stroke-width="12"/>
+    <path d="M94 146h0M128 146h0M162 146h0" stroke-width="12"/>
+  </g>
+</svg>
