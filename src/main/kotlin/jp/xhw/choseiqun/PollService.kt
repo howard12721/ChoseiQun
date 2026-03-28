@@ -1,4 +1,4 @@
-package app.choseiqun
+package jp.xhw.choseiqun
 
 import io.ktor.http.*
 import java.time.Instant

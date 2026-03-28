@@ -1,4 +1,4 @@
-package app.choseiqun
+package jp.xhw.choseiqun
 
 import jp.xhw.trakt.bot.TraktClient
 import jp.xhw.trakt.bot.scope.fetchChannel
