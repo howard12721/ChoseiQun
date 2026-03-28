@@ -1,4 +1,4 @@
-package app.choseiqun
+package jp.xhw.choseiqun
 
 import kotlinx.serialization.Serializable
 import kotlin.uuid.Uuid

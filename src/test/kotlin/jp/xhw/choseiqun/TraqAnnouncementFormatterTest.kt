@@ -1,4 +1,4 @@
-package app.choseiqun
+package jp.xhw.choseiqun
 
 import kotlin.test.Test
 import kotlin.test.assertContains

@@ -1,4 +1,4 @@
-package app.choseiqun
+package jp.xhw.choseiqun
 
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*

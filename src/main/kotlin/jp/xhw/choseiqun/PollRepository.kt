@@ -1,4 +1,4 @@
-package app.choseiqun
+package jp.xhw.choseiqun
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

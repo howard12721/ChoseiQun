@@ -8,7 +8,7 @@ group = "jp.xhw"
 version = "0.0.1"
 
 application {
-    mainClass = "app.choseiqun.AppKt"
+    mainClass = "jp.xhw.choseiqun.AppKt"
 }
 
 dependencies {
