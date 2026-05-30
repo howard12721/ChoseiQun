@@ -1,6 +1,6 @@
 [versions]
 exposed = "1.1.1"
-kotlin = "2.3.20"
+kotlin = "2.3.21"
 ktor = "3.4.1"
 kotlinx-coroutines = "1.10.2"
 mysql = "3.5.7"
