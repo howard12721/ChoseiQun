@@ -36,6 +36,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/choseiqun
           tags: |
             type=sha,prefix=sha-
+            type=sha,format=long,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and optionally push image
@@ -50,10 +51,38 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Check out deploy branch
+        if: github.ref == 'refs/heads/main'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: deploy
+          path: deploy-branch
+
+      - name: Update deploy image
+        if: github.ref == 'refs/heads/main'
+        working-directory: deploy-branch
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/choseiqun:sha-${{ github.sha }}
+        run: |
+          printf 'FROM %s\n' "$IMAGE" > Dockerfile
+
+          if git diff --quiet -- Dockerfile; then
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile
+          git commit -m "deploy: use sha-${GITHUB_SHA}"
+          git push origin HEAD:deploy
+
   publish:
     if: github.event_name != 'pull_request'
+    concurrency:
+      group: deploy-image
+      cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
       packages: write
     runs-on: ubuntu-latest
     steps: *docker-steps
