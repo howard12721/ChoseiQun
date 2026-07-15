@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/root/.gradle \
     --mount=type=cache,target=/root/.konan \
     ./gradlew --no-daemon serverTest linkReleaseExecutableServer
 
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 WORKDIR /app
 
