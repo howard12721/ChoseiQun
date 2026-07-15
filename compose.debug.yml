@@ -2,7 +2,7 @@ name: choseiqun-debug
 
 services:
   database:
-    image: mariadb:11.8
+    image: mariadb:12.3
     environment:
       MARIADB_DATABASE: choseiqun
       MARIADB_USER: choseiqun
