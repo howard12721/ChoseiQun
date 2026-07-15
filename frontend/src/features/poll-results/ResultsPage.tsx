@@ -131,7 +131,7 @@ export function ResultsPage(props: {
                             name={participant.name}
                             traqId={resolveTraqId(participant.name, participant.traqId ?? undefined)}
                           />
-                          <div className="stack tight">
+                          <div className="stack tight participant-summary__identity">
                             <strong>{participant.name}</strong>
                             {participant.traqId && participant.traqId !== participant.name ? (
                               <span className="muted-text">@{participant.traqId}</span>

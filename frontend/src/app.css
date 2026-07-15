@@ -1565,6 +1565,29 @@ textarea:focus-visible,
     flex-direction: column;
   }
 
+  .response-matrix thead th:first-child,
+  .response-matrix tbody th:first-child {
+    width: 4.5rem;
+    min-width: 4.5rem;
+  }
+
+  .response-matrix .participant-summary {
+    justify-content: center;
+    gap: 0;
+  }
+
+  .response-matrix .participant-summary__identity {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .answer-calendar-page__header {
     align-items: flex-start;
     flex-direction: column;
