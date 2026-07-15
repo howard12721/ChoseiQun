@@ -1,23 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { belongsToAnsweredPollList } from "../src/utils/pollList.ts";
+import { selectHomePollLists } from "../src/entities/poll/listSelectors.ts";
 
-test("a poll created and answered by the viewer appears in the answered list", () => {
-  assert.equal(
-    belongsToAnsweredPollList({
-      createdByViewer: true,
-      respondedByViewer: true,
-    }),
-    true,
-  );
-});
+const basePoll = {
+  title: "会議",
+  state: "OPEN",
+  candidateDates: [],
+  participantCount: 0,
+  viewerResponses: {},
+  participantUrl: "/polls/poll",
+  updatedAt: "2026-07-01T00:00:00Z",
+};
 
-test("a created poll without a viewer response does not appear in the answered list", () => {
-  assert.equal(
-    belongsToAnsweredPollList({
-      createdByViewer: true,
-      respondedByViewer: false,
-    }),
-    false,
-  );
+test("home poll lists classify created and answered polls independently", () => {
+  const { createdPolls, answeredPolls } = selectHomePollLists([
+    { ...basePoll, id: "created-only", createdByViewer: true, respondedByViewer: false },
+    { ...basePoll, id: "created-and-answered", createdByViewer: true, respondedByViewer: true },
+    { ...basePoll, id: "answered-only", createdByViewer: false, respondedByViewer: true },
+  ]);
+
+  assert.deepEqual(createdPolls.map((poll) => poll.id), ["created-only", "created-and-answered"]);
+  assert.deepEqual(answeredPolls.map((poll) => poll.id), ["created-and-answered", "answered-only"]);
 });

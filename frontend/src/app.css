@@ -195,7 +195,6 @@ code {
 .hero-card,
 .dashboard-card,
 .subsection-card,
-.metric-card,
 .month-card,
 .poll-card,
 .flow-item,
@@ -478,46 +477,6 @@ code {
 
 .availability-icon--no {
   color: var(--danger);
-}
-
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.metrics-grid--single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.metric-card {
-  display: grid;
-  gap: 0.35rem;
-  padding: 1rem 1.25rem;
-  min-height: 8.25rem;
-  align-content: start;
-}
-
-.metric-card--accent {
-  border-color: #a6c8ff;
-}
-
-.metric-card__label {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-}
-
-.metric-card__value {
-  font-size: clamp(1.625rem, 3vw, 2.5rem);
-  font-weight: 400;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
-.metric-card__hint {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
 }
 
 .poll-list,
@@ -1094,8 +1053,7 @@ code {
   .dashboard-layout,
   .poll-layout,
   .results-comments-layout,
-  .results-stack,
-  .metrics-grid {
+  .results-stack {
     grid-template-columns: 1fr;
   }
 }
@@ -1131,8 +1089,7 @@ code {
 
   .hero-card,
   .dashboard-card,
-  .subsection-card,
-  .metric-card {
+  .subsection-card {
     padding: 1rem;
   }
 

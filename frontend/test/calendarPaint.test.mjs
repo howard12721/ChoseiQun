@@ -5,7 +5,7 @@ import {
   finishCalendarPaint,
   moveCalendarPaint,
   startCalendarPaint,
-} from "../src/utils/calendarPaint.ts";
+} from "../src/features/poll-setup/calendarPaint.ts";
 
 test("touch drag paints the date range without applying a tap first", () => {
   const paint = startCalendarPaint({
