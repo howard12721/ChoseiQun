@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.22
+
+FROM eclipse-temurin:21.0.11_10-jdk-jammy AS build
+
+WORKDIR /workspace
+
+COPY gradlew gradle.properties settings.gradle.kts build.gradle.kts ./
+COPY gradle ./gradle
+
+RUN chmod +x ./gradlew
+
+COPY src ./src
+
+RUN --mount=type=cache,target=/root/.gradle \
+    --mount=type=cache,target=/root/.konan \
+    ./gradlew --no-daemon serverTest linkDebugExecutableServer
+
+FROM ubuntu:22.04
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates curl zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
+    && useradd --system --gid app --create-home --home-dir /app app
+
+COPY --from=build /workspace/build/bin/server/debugExecutable/choseiqun.kexe /usr/local/bin/choseiqun
+
+USER app
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/choseiqun"]

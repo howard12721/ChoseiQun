@@ -1,20 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">ChoseiQun Icon</title>
-  <desc id="desc">A tall monochrome speech bubble and schedule grid icon for favicon use.</desc>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 256 256"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">調整くん</title>
+  <desc id="desc">日程表と会話の吹き出しを組み合わせた青いアイコン</desc>
 
-  <rect x="16" y="16" width="224" height="224" rx="56" fill="#edf5ff"/>
+  <rect width="256" height="256" rx="52" fill="#0f62fe"/>
 
-  <g fill="none" stroke="#111111" stroke-linecap="round" stroke-linejoin="round">
-    <path
-      d="M76 30h104c24.301 0 44 19.699 44 44v84c0 24.301-19.699 44-44 44h-42.786l-23.271 22.336c-4.619 4.433-12.342 1.159-12.342-5.243V202H76c-24.301 0-44-19.699-44-44V74c0-24.301 19.699-44 44-44z"
-      stroke-width="12"
-    />
+  <path
+    fill="#ffffff"
+    d="M52 46h152c8.837 0 16 7.163 16 16v112c0 8.837-7.163 16-16 16h-42l-29.52 25.83c-5.167 4.522-13.24.852-13.24-6.013V190H52c-8.837 0-16-7.163-16-16V62c0-8.837 7.163-16 16-16z"
+  />
 
-    <rect x="68" y="62" width="120" height="104" rx="22" stroke-width="10"/>
-    <path d="M68 96h120" stroke-width="10"/>
-    <path d="M98 46v28M158 46v28" stroke-width="10"/>
+  <path fill="#0f62fe" d="M36 84h184v20H36z"/>
+  <path
+    fill="#ffffff"
+    d="M78 30h16v40H78zM162 30h16v40h-16z"
+  />
 
-    <path d="M94 122h0M128 122h0M162 122h0" stroke-width="12"/>
-    <path d="M94 146h0M128 146h0M162 146h0" stroke-width="12"/>
-  </g>
+  <path
+    fill="#0f62fe"
+    d="M68 124h28v24H68zM114 124h28v24h-28zM160 124h28v24h-28zM68 162h28v12H68zM114 162h28v12h-28zM160 162h28v12h-28z"
+  />
 </svg>

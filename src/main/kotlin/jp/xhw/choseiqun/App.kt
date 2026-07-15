@@ -1,115 +1,83 @@
 package jp.xhw.choseiqun
 
-import io.ktor.server.engine.*
-import io.ktor.server.netty.*
+import io.ktor.server.cio.CIO
+import io.ktor.server.engine.embeddedServer
+import jp.xhw.choseiqun.application.identity.OrganizerIdentityBackfill
+import jp.xhw.choseiqun.application.poll.PollService
+import jp.xhw.choseiqun.config.AppConfig
+import jp.xhw.choseiqun.infrastructure.persistence.MariaDb
+import jp.xhw.choseiqun.infrastructure.persistence.SqlxIdentityRepository
+import jp.xhw.choseiqun.infrastructure.persistence.SqlxPollRepository
+import jp.xhw.choseiqun.infrastructure.traq.TraqAnnouncementGateway
+import jp.xhw.choseiqun.infrastructure.traq.TraqIdentityDirectory
+import jp.xhw.choseiqun.presentation.http.PollHttpPresenter
+import jp.xhw.choseiqun.presentation.http.configureHttp
+import jp.xhw.choseiqun.presentation.traq.TraqBotRunner
 import jp.xhw.trakt.bot.trakt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import java.net.URI
-import kotlin.uuid.Uuid
 
 fun main() {
-    val config = AppConfig.fromEnvironment()
-    val repository = PollRepository(config.database)
     runBlocking {
-        repository.initialize()
+        val config = AppConfig.fromEnvironment()
+        val database = MariaDb(config.database)
+        try {
+            database.initialize()
+            runApplication(config, database)
+        } finally {
+            database.close()
+        }
     }
+}
+
+private suspend fun CoroutineScope.runApplication(
+    config: AppConfig,
+    database: MariaDb,
+) {
+    val pollRepository = SqlxPollRepository(database.client)
+    val identityRepository = SqlxIdentityRepository(database.client)
     val traqClient =
         config.botConfig?.let {
-            trakt(token = it.token, botId = it.botId, origin = it.traqOrigin) {}
+            trakt(token = it.token, botId = it.botId, origin = it.traqOrigin)
         }
+    val identityDirectory = TraqIdentityDirectory(identityRepository, traqClient)
+    OrganizerIdentityBackfill(identityDirectory, identityRepository).run()
     val announcementGateway =
         traqClient?.let {
-            TraqAnnouncementGateway(it)
+            TraqAnnouncementGateway(it, config.publicBaseUrl)
         }
     val pollService =
         PollService(
-            repository = repository,
-            baseUrl = config.publicBaseUrl,
-            traqBaseUrl = config.traqBaseUrl,
+            repository = pollRepository,
             announcementGateway = announcementGateway,
         )
+    val presenter = PollHttpPresenter(config.publicBaseUrl, config.traqBaseUrl)
     val botRunner =
         traqClient?.let {
-            TraqBotRunner(it, pollService, config.publicBaseUrl)
+            TraqBotRunner.create(it, pollService, identityDirectory)
         }
     val server =
-        embeddedServer(Netty, host = "0.0.0.0", port = config.port) {
-            configureHttp(pollService)
+        embeddedServer(CIO, host = "0.0.0.0", port = config.port) {
+            configureHttp(pollService, identityDirectory, presenter, config.publicBaseUrl)
         }
 
-    Runtime.getRuntime().addShutdownHook(
-        Thread {
-            runBlocking {
-                botRunner?.stop()
-            }
-        },
-    )
-
-    if (botRunner != null) {
-        Thread.ofVirtual().name("traq-bot").start {
-            runBlocking {
+    val botJob =
+        botRunner?.let {
+            launch(Dispatchers.Default) {
                 botRunner.run()
             }
         }
-    }
 
-    server.start(wait = true)
-}
-
-data class AppConfig(
-    val port: Int,
-    val publicBaseUrl: String,
-    val database: MariaDbConfig,
-    val traqBaseUrl: String,
-    val traqOrigin: String,
-    val botConfig: TraqBotConfig?,
-) {
-    companion object {
-        fun fromEnvironment(): AppConfig {
-            val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
-            val publicBaseUrl = System.getenv("PUBLIC_BASE_URL") ?: "http://localhost:5173"
-            val database =
-                MariaDbConfig(
-                    jdbcUrl = System.getenv("MARIADB_URL") ?: "jdbc:mariadb://localhost:3306/choseiqun",
-                    user = System.getenv("MARIADB_USER") ?: "root",
-                    password = System.getenv("MARIADB_PASSWORD") ?: "",
-                )
-            val traqBaseUrl = System.getenv("TRAQ_BASE_URL") ?: "https://q.trap.jp"
-            val traqOrigin =
-                System
-                    .getenv("TRAQ_ORIGIN")
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: runCatching { URI(traqBaseUrl).host }.getOrNull()
-                    ?: "q.trap.jp"
-
-            val botToken = System.getenv("TRAQ_BOT_TOKEN")
-            val botIdRaw = System.getenv("TRAQ_BOT_ID")
-            val botConfig =
-                if (!botToken.isNullOrBlank() && !botIdRaw.isNullOrBlank()) {
-                    TraqBotConfig(
-                        token = botToken,
-                        botId = Uuid.parse(botIdRaw),
-                        traqOrigin = traqOrigin,
-                    )
-                } else {
-                    null
-                }
-
-            return AppConfig(
-                port = port,
-                publicBaseUrl = publicBaseUrl,
-                database = database,
-                traqBaseUrl = traqBaseUrl,
-                traqOrigin = traqOrigin,
-                botConfig = botConfig,
-            )
+    try {
+        server.start(wait = true)
+    } finally {
+        try {
+            botRunner?.stop()
+        } finally {
+            botJob?.cancelAndJoin()
         }
     }
 }
-
-data class MariaDbConfig(
-    val jdbcUrl: String,
-    val user: String,
-    val password: String,
-)

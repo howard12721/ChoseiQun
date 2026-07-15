@@ -1,6 +1,11 @@
 .gradle/
+.git/
 .idea/
 .kotlin/
 build/
 out/
 frontend/
+.env
+.env.*
+*.key
+*.pem
