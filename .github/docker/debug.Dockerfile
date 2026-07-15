@@ -13,23 +13,19 @@ COPY src ./src
 
 RUN --mount=type=cache,target=/root/.gradle \
     --mount=type=cache,target=/root/.konan \
-    ./gradlew --no-daemon serverTest linkReleaseExecutableServer
+    ./gradlew --no-daemon serverTest linkDebugExecutableServer
 
 FROM ubuntu:22.04
 
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates zlib1g \
+    && apt-get install --yes --no-install-recommends ca-certificates curl zlib1g \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
     && useradd --system --gid app --create-home --home-dir /app app
 
-COPY --from=build /workspace/build/bin/server/releaseExecutable/choseiqun.kexe /usr/local/bin/choseiqun
-
-ENV PORT=8080
-
-RUN chown -R app:app /app
+COPY --from=build /workspace/build/bin/server/debugExecutable/choseiqun.kexe /usr/local/bin/choseiqun
 
 USER app
 

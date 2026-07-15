@@ -4,6 +4,7 @@ export type DayAvailability = "YES" | "MAYBE" | "NO";
 export type ParticipantResponse = {
   name: string;
   traqId?: string | null;
+  userId?: string | null;
   iconUrl?: string | null;
   note: string;
   comments: ParticipantComment[];
@@ -41,6 +42,7 @@ export type PollDetail = {
   setupUrl?: string | null;
   announcementMessageId?: string | null;
   viewerTraqId?: string | null;
+  viewerUserId?: string | null;
   viewerIconUrl?: string | null;
   participants: ParticipantResponse[];
   summary: PollSummary;
@@ -52,6 +54,9 @@ export type PollListItem = {
   state: PollState;
   candidateDates: string[];
   participantCount: number;
+  respondedByViewer: boolean;
+  createdByViewer: boolean;
+  viewerResponses: Record<string, DayAvailability>;
   participantUrl: string;
   updatedAt: string;
 };

@@ -68,6 +68,15 @@ export function formatDateLabel(date: string) {
   }).format(new Date(`${date}T00:00:00`));
 }
 
+export function formatFullDateLabel(date: string) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).format(new Date(`${date}T00:00:00`));
+}
+
 export function formatCandidateSummary(dates?: string[] | null) {
   if (!dates?.length) {
     return "候補日未設定";

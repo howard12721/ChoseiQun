@@ -15,6 +15,7 @@ export type EditorState = {
 
 export type AppRoute =
   | { kind: "home" }
-  | { kind: "setup"; id: string; token: string }
+  | { kind: "answers" }
+  | { kind: "setup"; id: string }
   | { kind: "poll"; id: string }
   | { kind: "results"; id: string };

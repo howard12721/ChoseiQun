@@ -1,15 +1,16 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import type { EditorState, SetupSelection } from "./app/types";
 import { resolveRoute } from "./app/routing";
-import { Shell, Hero } from "./components/Shell";
+import { Shell, Hero, type FlashMessage } from "./components/Shell";
+import { AnswerCalendarPage } from "./pages/AnswerCalendarPage";
 import { HomePage } from "./pages/HomePage";
 import { PollPage } from "./pages/PollPage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SetupPage } from "./pages/SetupPage";
 import type { DayAvailability, PollDetail, PollListItem } from "./types";
 import { addMonths, initialMonthForDates, sortDates, startOfMonth } from "./utils/date";
-import { hydrateEditor } from "./utils/poll";
+import { hydrateEditor, isViewerParticipant } from "./utils/poll";
 import { copyAndFlash, toErrorMessage } from "./utils/ui";
 
 const INITIAL_EDITOR_STATE: EditorState = {
@@ -19,6 +20,8 @@ const INITIAL_EDITOR_STATE: EditorState = {
   editingCommentCreatedAt: null,
   responses: {},
 };
+
+type PendingAction = "setup" | "availability" | "comment" | "delete-comment";
 
 function App() {
   const route = useMemo(() => resolveRoute(), []);
@@ -31,7 +34,20 @@ function App() {
     selectedDates: [],
     viewMonth: startOfMonth(new Date()),
   });
-  const [flash, setFlash] = useState<string | null>(null);
+  const [flash, setFlash] = useState<FlashMessage | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const allowSavedNavigationRef = useRef(false);
+  const hasUnsavedAvailability = useMemo(() => {
+    if (!poll || route.kind !== "poll") {
+      return false;
+    }
+    const savedResponses = poll.participants.find((participant) =>
+      isViewerParticipant(participant, poll)
+    )?.responses;
+    return poll.candidateDates.some(
+      (date) => editor.responses[date] !== (savedResponses?.[date] ?? "NO"),
+    );
+  }, [editor.responses, poll, route.kind]);
 
   useEffect(() => {
     void loadInitialState();
@@ -41,9 +57,30 @@ function App() {
     if (!flash) {
       return;
     }
-    const timeout = window.setTimeout(() => setFlash(null), 2200);
+    if (flash.tone === "error") {
+      return;
+    }
+    const timeout = window.setTimeout(() => setFlash(null), 3600);
     return () => window.clearTimeout(timeout);
   }, [flash]);
+
+  useEffect(() => {
+    if (!hasUnsavedAvailability) {
+      return;
+    }
+    function confirmLeave(event: BeforeUnloadEvent) {
+      if (allowSavedNavigationRef.current) {
+        return;
+      }
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", confirmLeave);
+    return () => window.removeEventListener("beforeunload", confirmLeave);
+  }, [hasUnsavedAvailability]);
+
+  function showFlash(message: string, tone: FlashMessage["tone"] = "info") {
+    setFlash({ message, tone });
+  }
 
   async function loadInitialState() {
     setLoading(true);
@@ -51,7 +88,7 @@ function App() {
 
     try {
       if (route.kind === "setup") {
-        const nextPoll = await api<PollDetail>(`/api/setup/${route.id}?token=${encodeURIComponent(route.token)}`);
+        const nextPoll = await api<PollDetail>(`/api/setup/${route.id}`);
         startTransition(() => {
           setPoll(nextPoll);
           setSetupSelection({
@@ -87,11 +124,11 @@ function App() {
   }
 
   async function submitSetup(formData: FormData) {
-    if (!poll || route.kind !== "setup") {
+    if (!poll || route.kind !== "setup" || pendingAction) {
       return;
     }
     if (!setupSelection.selectedDates.length) {
-      setFlash("候補日を1日以上選んでください");
+      showFlash("候補日を1日以上選んでください", "error");
       return;
     }
 
@@ -100,118 +137,139 @@ function App() {
       description: `${formData.get("description") ?? ""}`.trim(),
       candidateDates: sortDates(setupSelection.selectedDates),
     };
-    const nextPoll = await api<PollDetail>(`/api/setup/${poll.id}?token=${encodeURIComponent(route.token)}`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    startTransition(() => {
-      setPoll(nextPoll);
-      setSetupSelection((current) => ({
-        ...current,
-        selectedDates: sortDates(nextPoll.candidateDates),
-      }));
-    });
-    setFlash("候補日を保存しました");
+    setPendingAction("setup");
+    try {
+      const nextPoll = await api<PollDetail>(`/api/setup/${poll.id}`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      window.location.assign(nextPoll.participantUrl);
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function persistAvailability(nextResponses: Record<string, DayAvailability>) {
-    if (!poll || route.kind !== "poll") {
+    if (!poll || route.kind !== "poll" || pendingAction) {
       return;
     }
 
     const forwardedTraqId = poll.viewerTraqId ?? "";
     if (!forwardedTraqId) {
-      setFlash("traQ 経由で開いたページから回答してください");
+      showFlash("traQ 経由で開いたページから回答してください", "error");
       return;
     }
 
-    const nextPoll = await api<PollDetail>(`/api/polls/${poll.id}/availability`, {
-      method: "POST",
-      body: JSON.stringify({
-        name: forwardedTraqId,
-        responses: nextResponses,
-      }),
-    });
-    startTransition(() => {
-      setPoll(nextPoll);
-      setEditor((current) =>
-        hydrateEditor(nextPoll, nextPoll.viewerTraqId ?? current.traqId, {
-          ...current,
+    const isInitialResponse = !poll.participants.some((participant) =>
+      isViewerParticipant(participant, poll)
+    );
+    setPendingAction("availability");
+    try {
+      const nextPoll = await api<PollDetail>(`/api/polls/${poll.id}/availability`, {
+        method: "POST",
+        body: JSON.stringify({
           name: forwardedTraqId,
-          traqId: nextPoll.viewerTraqId ?? current.traqId,
           responses: nextResponses,
         }),
-      );
-    });
-    setFlash("日程を送信しました");
+      });
+      if (isInitialResponse) {
+        allowSavedNavigationRef.current = true;
+        window.location.assign(`/polls/${poll.id}/results`);
+        return;
+      }
+      startTransition(() => {
+        setPoll(nextPoll);
+        setEditor((current) =>
+          hydrateEditor(nextPoll, nextPoll.viewerTraqId ?? current.traqId, {
+            ...current,
+            name: forwardedTraqId,
+            traqId: nextPoll.viewerTraqId ?? current.traqId,
+            responses: nextResponses,
+          }),
+        );
+      });
+      showFlash("回答を保存しました", "success");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function submitComment(formData: FormData) {
-    if (!poll || (route.kind !== "poll" && route.kind !== "results")) {
+    if (!poll || pendingAction || (route.kind !== "poll" && route.kind !== "results")) {
       return;
     }
 
     const forwardedTraqId = poll.viewerTraqId ?? "";
     if (!forwardedTraqId) {
-      setFlash("traQ 経由で開いたページから回答してください");
+      showFlash("traQ 経由で開いたページから回答してください", "error");
       return;
     }
 
     const comment = `${formData.get("note") ?? ""}`.trim();
     if (!comment) {
-      setFlash("コメントを入力してください");
+      showFlash("コメントを入力してください", "error");
       return;
     }
 
     const isEditingComment = Boolean(editor.editingCommentCreatedAt);
-    const nextPoll = await api<PollDetail>(`/api/polls/${poll.id}/comments`, {
-      method: isEditingComment ? "PUT" : "POST",
-      body: JSON.stringify(
-        isEditingComment
-          ? { createdAt: editor.editingCommentCreatedAt, comment }
-          : { comment },
-      ),
-    });
-    startTransition(() => {
-      setPoll(nextPoll);
-      setEditor((current) =>
-        hydrateEditor(nextPoll, nextPoll.viewerTraqId ?? current.traqId, {
-          ...current,
-          note: "",
-          editingCommentCreatedAt: null,
-        }),
-      );
-    });
-    setFlash(isEditingComment ? "コメントを更新しました" : "コメントを投稿しました");
+    setPendingAction("comment");
+    try {
+      const nextPoll = await api<PollDetail>(`/api/polls/${poll.id}/comments`, {
+        method: isEditingComment ? "PUT" : "POST",
+        body: JSON.stringify(
+          isEditingComment
+            ? { createdAt: editor.editingCommentCreatedAt, comment }
+            : { comment },
+        ),
+      });
+      startTransition(() => {
+        setPoll(nextPoll);
+        setEditor((current) =>
+          hydrateEditor(nextPoll, nextPoll.viewerTraqId ?? current.traqId, {
+            ...current,
+            note: "",
+            editingCommentCreatedAt: null,
+          }),
+        );
+      });
+      showFlash(isEditingComment ? "コメントを更新しました" : "コメントを投稿しました", "success");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function deleteComment(createdAt: string) {
-    if (!poll || (route.kind !== "poll" && route.kind !== "results")) {
+    if (!poll || pendingAction || (route.kind !== "poll" && route.kind !== "results")) {
       return;
     }
 
     const forwardedTraqId = poll.viewerTraqId ?? "";
     if (!forwardedTraqId) {
-      setFlash("traQ 経由で開いたページから回答してください");
+      showFlash("traQ 経由で開いたページから回答してください", "error");
       return;
     }
 
-    const nextPoll = await api<PollDetail>(`/api/polls/${poll.id}/comments`, {
-      method: "DELETE",
-      body: JSON.stringify({ createdAt }),
-    });
-    startTransition(() => {
-      setPoll(nextPoll);
-      setEditor((current) =>
-        hydrateEditor(nextPoll, nextPoll.viewerTraqId ?? current.traqId, {
-          ...current,
-          note: current.editingCommentCreatedAt === createdAt ? "" : current.note,
-          editingCommentCreatedAt:
-            current.editingCommentCreatedAt === createdAt ? null : current.editingCommentCreatedAt,
-        }),
-      );
-    });
-    setFlash("コメントを削除しました");
+    setPendingAction("delete-comment");
+    try {
+      const nextPoll = await api<PollDetail>(`/api/polls/${poll.id}/comments`, {
+        method: "DELETE",
+        body: JSON.stringify({ createdAt }),
+      });
+      startTransition(() => {
+        setPoll(nextPoll);
+        setEditor((current) =>
+          hydrateEditor(nextPoll, nextPoll.viewerTraqId ?? current.traqId, {
+            ...current,
+            note: current.editingCommentCreatedAt === createdAt ? "" : current.note,
+            editingCommentCreatedAt:
+              current.editingCommentCreatedAt === createdAt ? null : current.editingCommentCreatedAt,
+          }),
+        );
+      });
+      showFlash("コメントを削除しました", "success");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   function toggleSetupDate(date: string) {
@@ -251,6 +309,7 @@ function App() {
   }
 
   function applyParticipantSelection(date: string, value: DayAvailability) {
+    allowSavedNavigationRef.current = false;
     setEditor((current) => {
       const nextResponses = { ...current.responses, [date]: value };
       return { ...current, responses: nextResponses };
@@ -266,31 +325,44 @@ function App() {
 
   if (loading) {
     return (
-      <Shell routeKind={route.kind}>
-        <Hero title="読み込み中" body="調整データを取得しています。" />
+      <Shell onDismissFlash={() => setFlash(null)}>
+        <Hero title="読み込み中" body="調整データを取得しています。" loading />
       </Shell>
     );
   }
 
   if (error) {
     return (
-      <Shell flash={flash} routeKind={route.kind}>
-        <Hero title="読み込みに失敗しました" body={error} />
+      <Shell flash={flash} onDismissFlash={() => setFlash(null)}>
+        <Hero
+          title="読み込みに失敗しました"
+          body={error}
+          actionLabel="もう一度試す"
+          onAction={() => void loadInitialState()}
+        />
       </Shell>
     );
   }
 
   if (route.kind === "home") {
     return (
-      <Shell flash={flash} routeKind={route.kind}>
-        <HomePage openPolls={openPolls} onCopy={(value) => copyAndFlash(value, setFlash)} />
+      <Shell flash={flash} onDismissFlash={() => setFlash(null)}>
+        <HomePage openPolls={openPolls} onCopy={(value) => copyAndFlash(value, showFlash)} />
+      </Shell>
+    );
+  }
+
+  if (route.kind === "answers") {
+    return (
+      <Shell flash={flash} onDismissFlash={() => setFlash(null)}>
+        <AnswerCalendarPage openPolls={openPolls} />
       </Shell>
     );
   }
 
   if (!poll) {
     return (
-      <Shell flash={flash} routeKind={route.kind}>
+      <Shell flash={flash} onDismissFlash={() => setFlash(null)}>
         <Hero title="調整が見つかりません" body="URL を確認してください。" />
       </Shell>
     );
@@ -298,7 +370,7 @@ function App() {
 
   if (route.kind === "setup") {
     return (
-      <Shell flash={flash} routeKind={route.kind}>
+      <Shell flash={flash} onDismissFlash={() => setFlash(null)}>
         <SetupPage
           poll={poll}
           selection={setupSelection}
@@ -310,20 +382,27 @@ function App() {
               viewMonth: addMonths(current.viewMonth, amount),
             }))
           }
+          onGoToCurrentMonth={() =>
+            setSetupSelection((current) => ({
+              ...current,
+              viewMonth: startOfMonth(new Date()),
+            }))
+          }
           onClearDates={() => replaceSetupDates([])}
+          isSaving={pendingAction === "setup"}
           onSubmit={(formData) =>
             submitSetup(formData).catch((caught) => {
-              setFlash(toErrorMessage(caught));
+              showFlash(toErrorMessage(caught), "error");
             })
           }
-          onCopy={(value) => copyAndFlash(value, setFlash)}
+          onCopy={(value) => copyAndFlash(value, showFlash)}
         />
       </Shell>
     );
   }
 
   return (
-    <Shell flash={flash} routeKind={route.kind}>
+    <Shell flash={flash} onDismissFlash={() => setFlash(null)}>
       {route.kind === "results" ? (
         <ResultsPage
           poll={poll}
@@ -345,52 +424,30 @@ function App() {
           }
           onDeleteComment={(createdAt) => {
             void deleteComment(createdAt).catch((caught) => {
-              setFlash(toErrorMessage(caught));
+              showFlash(toErrorMessage(caught), "error");
             });
           }}
+          isCommentBusy={pendingAction === "comment" || pendingAction === "delete-comment"}
           onSubmit={(formData) =>
             submitComment(formData).catch((caught) => {
-              setFlash(toErrorMessage(caught));
+              showFlash(toErrorMessage(caught), "error");
             })
           }
-          onCopy={(value) => copyAndFlash(value, setFlash)}
+          onCopy={(value) => copyAndFlash(value, showFlash)}
         />
       ) : (
         <PollPage
           poll={poll}
           editor={editor}
-          onNoteInput={(value) => setEditor((current) => ({ ...current, note: value }))}
-          onEditComment={(createdAt, body) =>
-            setEditor((current) => ({
-              ...current,
-              note: body,
-              editingCommentCreatedAt: createdAt,
-            }))
-          }
-          onCancelCommentEdit={() =>
-            setEditor((current) => ({
-              ...current,
-              note: "",
-              editingCommentCreatedAt: null,
-            }))
-          }
-          onDeleteComment={(createdAt) => {
-            void deleteComment(createdAt).catch((caught) => {
-              setFlash(toErrorMessage(caught));
-            });
-          }}
           onPickAvailability={applyParticipantSelection}
+          hasUnsavedChanges={hasUnsavedAvailability}
+          isSavingAvailability={pendingAction === "availability"}
           onSubmitAvailability={() =>
             submitAvailability().catch((caught) => {
-              setFlash(toErrorMessage(caught));
+              showFlash(toErrorMessage(caught), "error");
             })
           }
-          onSubmit={(formData) =>
-            submitComment(formData).catch((caught) => {
-              setFlash(toErrorMessage(caught));
-            })
-          }
-          onCopy={(value) => copyAndFlash(value, setFlash)}
+          onCopy={(value) => copyAndFlash(value, showFlash)}
         />
       )}
     </Shell>

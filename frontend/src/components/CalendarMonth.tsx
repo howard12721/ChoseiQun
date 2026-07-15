@@ -1,5 +1,19 @@
 import { useEffect, useRef } from "react";
-import { buildDateRange, buildMonthCells, formatDateLabel, isoDate, WEEKDAYS } from "../utils/date";
+import {
+  buildDateRange,
+  buildMonthCells,
+  formatDateLabel,
+  formatFullDateLabel,
+  isoDate,
+  WEEKDAYS,
+} from "../utils/date";
+import {
+  applyCalendarPaintSelection,
+  finishCalendarPaint,
+  moveCalendarPaint,
+  startCalendarPaint,
+  type CalendarPaintState,
+} from "../utils/calendarPaint";
 
 export function CalendarMonth(props: {
   monthDate: Date;
@@ -11,16 +25,27 @@ export function CalendarMonth(props: {
   const { monthDate, ...calendarCellProps } = props;
   const monthLabel = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long" }).format(monthDate);
   const cells = buildMonthCells(monthDate);
-  const dragStateRef = useRef<{
-    anchorDate: string;
-    lastDate: string;
-    nextSelected: boolean;
-    baseSelectedDates: string[];
-  } | null>(null);
+  const dragStateRef = useRef<CalendarPaintState | null>(null);
+  const onSetupSetDatesRef = useRef(props.onSetupSetDates);
+  onSetupSetDatesRef.current = props.onSetupSetDates;
 
   useEffect(() => {
-    function finishPaint() {
-      dragStateRef.current = null;
+    function finishPaint(event: PointerEvent) {
+      const dragState = dragStateRef.current;
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+      const result = finishCalendarPaint(
+        dragState,
+        event.type as "pointerup" | "pointercancel",
+        event.pointerId,
+      );
+      if (result.endDate) {
+        commitRangeSelection(dragState, result.endDate);
+      }
+      if (result.handled) {
+        dragStateRef.current = null;
+      }
     }
 
     window.addEventListener("pointerup", finishPaint);
@@ -31,33 +56,40 @@ export function CalendarMonth(props: {
     };
   }, []);
 
-  function applyRangeSelection(date: string) {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.lastDate === date) {
-      return;
-    }
-
-    dragState.lastDate = date;
-    const rangeDates = buildDateRange(dragState.anchorDate, date);
-    const nextDates = new Set(dragState.baseSelectedDates);
-    if (dragState.nextSelected) {
-      rangeDates.forEach((value) => nextDates.add(value));
-    } else {
-      rangeDates.forEach((value) => nextDates.delete(value));
-    }
-
-    props.onSetupSetDates?.(Array.from(nextDates));
+  function commitRangeSelection(
+    dragState: NonNullable<typeof dragStateRef.current>,
+    date: string,
+  ) {
+    onSetupSetDatesRef.current?.(
+      applyCalendarPaintSelection(dragState, buildDateRange(dragState.anchorDate, date)),
+    );
   }
 
-  function startPaint(date: string) {
-    const nextSelected = !props.selectedDates.includes(date);
-    dragStateRef.current = {
-      anchorDate: date,
-      lastDate: "",
-      nextSelected,
-      baseSelectedDates: props.selectedDates,
-    };
-    applyRangeSelection(date);
+  function applyRangeSelection(date: string, pointerId: number) {
+    const dragState = dragStateRef.current;
+    if (!dragState) {
+      return;
+    }
+    const endDate = moveCalendarPaint(dragState, date, pointerId);
+    if (endDate) {
+      commitRangeSelection(dragState, endDate);
+    }
+  }
+
+  function startPaint(date: string, event: React.PointerEvent<HTMLButtonElement>) {
+    if (!event.isPrimary || event.button !== 0) {
+      return;
+    }
+    const paint = startCalendarPaint({
+      date,
+      selectedDates: props.selectedDates,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType,
+    });
+    dragStateRef.current = paint.state;
+    if (paint.endDate) {
+      commitRangeSelection(paint.state, paint.endDate);
+    }
   }
 
   function findSetupDateAtPoint(container: HTMLElement, clientX: number, clientY: number) {
@@ -79,8 +111,7 @@ export function CalendarMonth(props: {
           <ChevronIcon direction="left" />
         </button>
         <div className="month-card__title">
-          <h3>{monthLabel}</h3>
-          <span className="section-caption">{props.mode === "setup" ? "候補日を選択" : "回答を入力"}</span>
+          <h3 aria-live="polite">{monthLabel}</h3>
         </div>
         <button
           type="button"
@@ -92,16 +123,21 @@ export function CalendarMonth(props: {
         </button>
       </div>
       <div className="weekday-row">
-        {WEEKDAYS.map((day) => (
-          <span key={day}>{day}</span>
+        {WEEKDAYS.map((day, index) => (
+          <span className={index === 0 ? "is-sunday" : index === 6 ? "is-saturday" : ""} key={day}>
+            {day}
+          </span>
         ))}
       </div>
       <div
         className="month-grid"
         onPointerMove={(event) => {
+          if (!event.isPrimary) {
+            return;
+          }
           const date = findSetupDateAtPoint(event.currentTarget, event.clientX, event.clientY);
           if (date) {
-            applyRangeSelection(date);
+            applyRangeSelection(date, event.pointerId);
           }
         }}
       >
@@ -129,10 +165,17 @@ export function SelectedDatesPanel({ dates, onRemove }: { dates: string[]; onRem
   }
 
   return (
-    <div className="selected-dates">
+    <div className="selected-dates" aria-label="選択中の候補日">
       {dates.map((date) => (
-        <button key={date} type="button" className="date-chip" onClick={() => onRemove(date)}>
-          {formatDateLabel(date)}
+        <button
+          key={date}
+          type="button"
+          className="date-chip"
+          aria-label={`${formatFullDateLabel(date)}を候補から削除`}
+          onClick={() => onRemove(date)}
+        >
+          <span>{formatDateLabel(date)}</span>
+          <span className="date-chip__remove" aria-hidden="true">×</span>
         </button>
       ))}
     </div>
@@ -161,7 +204,7 @@ function CalendarCell(props: {
   monthDate: Date;
   mode: "setup";
   selectedDates: string[];
-  onSetupPaintStart?: (date: string) => void;
+  onSetupPaintStart?: (date: string, event: React.PointerEvent<HTMLButtonElement>) => void;
   onSetupSetDates?: (dates: string[]) => void;
 }) {
   const {
@@ -174,10 +217,14 @@ function CalendarCell(props: {
   const date = isoDate(cell);
   const inCurrentMonth = cell.getMonth() === monthDate.getMonth();
   const isCandidate = selectedDates.includes(date);
+  const isToday = date === isoDate(new Date());
   const className = [
     "day-cell",
     !inCurrentMonth && "out-of-month",
     isCandidate && "in-range",
+    isToday && "is-today",
+    cell.getDay() === 0 && "is-sunday",
+    cell.getDay() === 6 && "is-saturday",
   ]
     .filter(Boolean)
     .join(" ");
@@ -187,7 +234,9 @@ function CalendarCell(props: {
       type="button"
       className={className}
       data-setup-date={date}
-      onPointerDown={() => onSetupPaintStart?.(date)}
+      aria-label={`${formatFullDateLabel(date)}${isCandidate ? "、選択中" : ""}`}
+      aria-pressed={isCandidate}
+      onPointerDown={(event) => onSetupPaintStart?.(date, event)}
       onClick={(event) => {
         if (event.detail === 0) {
           onSetupSetDates?.(

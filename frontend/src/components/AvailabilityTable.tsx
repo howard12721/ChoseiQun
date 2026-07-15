@@ -1,14 +1,15 @@
 import type { DayAvailability } from "../types";
 import { formatDateLabel, sortDates } from "../utils/date";
-import { availabilityButtonClass } from "../utils/ui";
-import { AvailabilityOptionIcon } from "./AvailabilityStatus";
+import { availabilityButtonClass, availabilityLabel } from "../utils/ui";
+import { AvailabilityIcon } from "./AvailabilityIcon";
 
 export function AvailabilityTable(props: {
   dates: string[];
   responses: Record<string, DayAvailability>;
+  disabled?: boolean;
   onPickAvailability: (date: string, value: DayAvailability) => void;
 }) {
-  const { dates, responses, onPickAvailability } = props;
+  const { dates, responses, disabled = false, onPickAvailability } = props;
   const sortedDates = sortDates(dates);
 
   if (!sortedDates.length) {
@@ -18,10 +19,11 @@ export function AvailabilityTable(props: {
   return (
     <div className="availability-table-wrap">
       <table className="availability-table">
+        <caption className="visually-hidden">候補日ごとの参加可否を選択</caption>
         <thead>
           <tr>
-            <th>日付</th>
-            <th>あなたの予定</th>
+            <th scope="col">日付</th>
+            <th scope="col">あなたの予定</th>
           </tr>
         </thead>
         <tbody>
@@ -29,12 +31,13 @@ export function AvailabilityTable(props: {
             const response = responses[date];
             return (
               <tr key={date}>
-                <td>
+                <th scope="row">
                   <div className="availability-date">{formatDateLabel(date)}</div>
                   <div className="availability-date-subtle">{date}</div>
-                </td>
+                </th>
                 <td>
-                  <div className="availability-actions">
+                  <fieldset className="availability-actions">
+                    <legend className="visually-hidden">{formatDateLabel(date)}の予定</legend>
                     {([
                       ["YES", "参加可"],
                       ["MAYBE", "たぶん"],
@@ -44,13 +47,16 @@ export function AvailabilityTable(props: {
                         key={tool}
                         type="button"
                         className={availabilityButtonClass(tool, response)}
+                        disabled={disabled}
+                        aria-label={`${formatDateLabel(date)}: ${availabilityLabel(tool)}`}
+                        aria-pressed={(response ?? "NO") === tool}
                         onClick={() => onPickAvailability(date, tool)}
                       >
-                        <AvailabilityOptionIcon value={tool} />
+                        <AvailabilityIcon value={tool} />
                         <span>{label}</span>
                       </button>
                     ))}
-                  </div>
+                  </fieldset>
                 </td>
               </tr>
             );

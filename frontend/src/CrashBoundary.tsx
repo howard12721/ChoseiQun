@@ -91,7 +91,6 @@ function CrashScreen(props: { error: CapturedError; onReload: () => void; onGoHo
   return (
     <main className="crash-screen">
       <section className="crash-card">
-        <span className="eyebrow">Frontend Crash</span>
         <h1>画面の描画中にエラーが発生しました</h1>
         <p className="crash-message">{error.message}</p>
         <div className="button-row">

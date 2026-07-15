@@ -1,10 +1,9 @@
-import type { AppRoute } from "../app/types";
 import type { DayAvailability } from "../types";
 
 export function availabilityLabel(value: DayAvailability) {
-  if (value === "YES") return "参加可";
+  if (value === "YES") return "参加できる";
   if (value === "MAYBE") return "たぶん";
-  return "不可";
+  return "参加できない";
 }
 
 export function availabilityButtonClass(tool: DayAvailability, current: DayAvailability | undefined) {
@@ -21,19 +20,15 @@ export function toErrorMessage(caught: unknown) {
   return "予期しないエラーが発生しました";
 }
 
-export function copyAndFlash(value: string, setFlash: (message: string) => void) {
+export function copyAndFlash(
+  value: string,
+  setFlash: (message: string, tone: "success" | "error" | "info") => void,
+) {
   void navigator.clipboard.writeText(value)
     .then(() => {
-      setFlash("コピーしました");
+      setFlash("クリップボードにコピーしました", "success");
     })
     .catch((caught) => {
-      setFlash(toErrorMessage(caught));
+      setFlash(toErrorMessage(caught), "error");
     });
-}
-
-export function routeKindLabel(kind: AppRoute["kind"]) {
-  if (kind === "home") return "Home";
-  if (kind === "setup") return "Setup";
-  if (kind === "results") return "Results";
-  return "Poll";
 }

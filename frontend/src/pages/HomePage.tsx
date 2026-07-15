@@ -1,47 +1,87 @@
 import type { PollListItem } from "../types";
 import { formatCandidateSummary } from "../utils/date";
+import { belongsToAnsweredPollList } from "../utils/pollList";
 
 export function HomePage({ openPolls, onCopy }: { openPolls: PollListItem[]; onCopy: (value: string) => void }) {
+  const createdPolls = openPolls.filter((poll) => poll.createdByViewer);
+  const answeredPolls = openPolls.filter(belongsToAnsweredPollList);
+
   return (
     <section className="home-stack">
       <div className="hero-card stack">
-        <span className="eyebrow">Overview</span>
         <h1>調整くん</h1>
-        <p><code>@BOT_chosei イベント名</code> で日程調整を開始</p>
-        <div className="button-row">
-          <button className="primary-button" type="button" onClick={() => onCopy("chosei start イベント名")}>
-            コマンドをコピー
+        <div className="command-box" aria-label="日程調整を開始するコマンド">
+          <code>@BOT_chosei イベント名</code>
+          <button className="primary-button" type="button" onClick={() => onCopy("@BOT_chosei イベント名")}>
+            コピー
           </button>
         </div>
       </div>
 
-      <div className="dashboard-card stack" id="open-polls">
-        <div className="section-head">
-          <div>
-            <h2>公開中の日程調整</h2>
-            <p className="section-caption">進行中の調整一覧</p>
-          </div>
-          <span className="count-badge">{openPolls.length}件</span>
-        </div>
-        <div className="poll-list">
-          {openPolls.length ? (
-            openPolls.map((poll) => (
-              <article className="poll-card" key={poll.id}>
-                <div className="poll-card__header">
-                  <strong>{poll.title}</strong>
-                  <span className="count-badge">{poll.participantCount}人</span>
-                </div>
-                <span className="muted-text">{formatCandidateSummary(poll.candidateDates)}</span>
-                <a className="text-link" href={`/polls/${poll.id}`}>
-                  参加ページを開く
-                </a>
-              </article>
-            ))
-          ) : (
-            <div className="empty-state">まだ公開中の調整はありません</div>
-          )}
-        </div>
-      </div>
+      <PollListSection
+        id="created-polls"
+        title="作成した日程調整"
+        polls={createdPolls}
+        actionLabel="結果を確認"
+        emptyMessage="作成した日程調整はありません"
+        pollHref={(poll) => `/polls/${poll.id}/results`}
+      />
+
+      <PollListSection
+        id="answered-polls"
+        title="回答した日程調整"
+        polls={answeredPolls}
+        actionLabel="回答を確認"
+        emptyMessage="回答した日程調整はありません"
+        calendarHref="/answers"
+        pollHref={(poll) => `/polls/${poll.id}`}
+      />
     </section>
+  );
+}
+
+function PollListSection(props: {
+  id: string;
+  title: string;
+  polls: PollListItem[];
+  actionLabel: string;
+  emptyMessage: string;
+  calendarHref?: string;
+  pollHref: (poll: PollListItem) => string;
+}) {
+  const { id, title, polls, actionLabel, emptyMessage, calendarHref, pollHref } = props;
+  const headingId = `${id}-title`;
+
+  return (
+    <section className="dashboard-card stack open-polls" id={id} aria-labelledby={headingId}>
+      <div className="section-head">
+        <h2 id={headingId}>{title}</h2>
+        {calendarHref ? <a className="text-link" href={calendarHref}>カレンダー →</a> : null}
+      </div>
+
+      {polls.length ? (
+        <ul className="poll-list">
+          {polls.map((poll) => (
+            <li key={poll.id}>
+              <PollCard poll={poll} actionLabel={actionLabel} href={pollHref(poll)} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="empty-state">{emptyMessage}</div>
+      )}
+    </section>
+  );
+}
+
+function PollCard({ poll, actionLabel, href }: { poll: PollListItem; actionLabel: string; href: string }) {
+  return (
+    <a className="poll-card" href={href}>
+      <div className="poll-card__header">
+        <strong>{poll.title}</strong>
+      </div>
+      <span className="poll-card__dates">{formatCandidateSummary(poll.candidateDates)}</span>
+      <span className="text-link">{actionLabel} →</span>
+    </a>
   );
 }

@@ -15,10 +15,17 @@ export function buildDefaultResponses(dates: string[], current: Record<string, D
   ) as Record<string, DayAvailability>;
 }
 
+export function isViewerParticipant(participant: ParticipantResponse, poll: PollDetail) {
+  if (poll.viewerUserId) {
+    return participant.userId === poll.viewerUserId;
+  }
+  return Boolean(poll.viewerTraqId && participant.traqId === poll.viewerTraqId);
+}
+
 export function hydrateEditor(poll: PollDetail, viewerTraqId: string, current: EditorState): EditorState {
   const existing = poll.participants.find((participant) => {
-    if (viewerTraqId) {
-      return participant.traqId === viewerTraqId;
+    if (poll.viewerUserId || viewerTraqId) {
+      return isViewerParticipant(participant, poll);
     }
     return participant.name.trim().toLowerCase() === current.name.trim().toLowerCase();
   });

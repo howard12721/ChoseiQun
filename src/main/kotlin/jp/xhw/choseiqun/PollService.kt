@@ -1,10 +1,9 @@
 package jp.xhw.choseiqun
 
 import io.ktor.http.*
-import java.time.Instant
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.*
+import kotlinx.datetime.LocalDate
+import kotlin.time.Clock
+import kotlin.uuid.Uuid
 
 class PollService(
     private val repository: PollRepository,
@@ -12,45 +11,45 @@ class PollService(
     private val traqBaseUrl: String,
     private val announcementGateway: PollAnnouncementGateway? = null,
 ) {
-    private val dayFormatter = DateTimeFormatter.ofPattern("M/d(E)")
-
     suspend fun createDraftPoll(command: CreateDraftPollCommand): PollRecord {
         val title = command.title.trim().ifBlank { "日程調整" }
-        val now = Instant.now().toString()
+        val now = nowIsoString()
         val poll =
             PollRecord(
-                id = UUID.randomUUID().toString().take(8),
-                setupToken = UUID.randomUUID().toString(),
+                id = Uuid.random().toString().take(8),
                 title = title,
                 createdAt = now,
                 updatedAt = now,
                 organizerUserId = command.organizerUserId,
+                organizerTraqId = command.organizerTraqId,
                 traqChannelId = command.traqChannelId,
             )
-        return repository.save(poll)
+        return syncAnnouncement(repository.save(poll))
     }
 
-    suspend fun listOpenPolls(): List<PollListItemResponse> =
-        repository
-            .list()
-            .filter { it.state == PollState.OPEN }
+    suspend fun listOpenPolls(viewerIdentity: ViewerIdentity? = null): List<PollListItemResponse> {
+        val viewer = viewerIdentity ?: return emptyList()
+        return repository
+            .listOpenForViewer(viewer.userId)
             .map { it.toListItemResponse(baseUrl) }
+    }
 
     suspend fun getSetupPoll(
         id: String,
-        token: String,
-        viewerTraqId: String? = null,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
-        val poll = requireSetupAccess(id, token)
-        return poll.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(poll), viewerTraqId, includeSetupUrl = true)
+        val viewer = requireSetupViewer(viewerIdentity)
+        val poll = requireSetupAccess(id, viewer)
+        return poll.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(poll), viewer, includeSetupUrl = true)
     }
 
     suspend fun completeSetup(
         id: String,
-        token: String,
         request: CompleteSetupRequest,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
-        val existing = requireSetupAccess(id, token)
+        val viewer = requireSetupViewer(viewerIdentity)
+        val existing = requireSetupAccess(id, viewer)
         val title = request.title.trim()
         require(title.isNotBlank()) { "タイトルを入力してください" }
 
@@ -72,53 +71,49 @@ class PollService(
                     description = request.description.trim(),
                     state = PollState.OPEN,
                     candidateDates = candidateDates,
-                    updatedAt = Instant.now().toString(),
+                    organizerTraqId = existing.organizerTraqId ?: viewer.traqId,
+                    updatedAt = nowIsoString(),
                 ),
             )
         val synced = syncAnnouncement(updated)
-        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), includeSetupUrl = true)
+        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), viewer, includeSetupUrl = true)
     }
 
     suspend fun getPublicPoll(
         id: String,
-        viewerTraqId: String? = null,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
         val poll = requireOpenPoll(id)
-        return poll.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(poll), viewerTraqId)
+        return poll.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(poll), viewerIdentity)
     }
 
     suspend fun upsertAvailability(
         id: String,
         request: UpsertAvailabilityRequest,
-        viewerTraqId: String? = null,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
         val poll = requireOpenPoll(id)
-        val normalizedTraqId = viewerTraqId?.trim()?.takeIf { it.isNotBlank() }
-        require(normalizedTraqId != null) { "traQ ID を取得できませんでした。traQ から開き直してください" }
-        val participantName = normalizedTraqId
+        val viewer = requireViewer(viewerIdentity)
+        val participantName = viewer.traqId
 
-        val normalizedName = participantName.lowercase()
         val existingParticipant =
-            poll.participants.firstOrNull {
-                it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-            }
+            poll.participants.firstOrNull { it.belongsTo(viewer) }
         val updatedParticipant =
             ParticipantRecord(
                 name = participantName,
-                traqId = normalizedTraqId,
+                traqId = viewer.traqId,
+                userId = viewer.userId,
                 note = existingParticipant?.note.orEmpty(),
                 comments = existingParticipant?.comments.orEmpty(),
                 responses = buildParticipantResponses(poll.candidateDates, request.responses),
-                updatedAt = Instant.now().toString(),
+                updatedAt = nowIsoString(),
             )
         val mergedParticipants =
             poll.participants
                 .toMutableList()
                 .apply {
                     val index =
-                        indexOfFirst {
-                            it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-                        }
+                        indexOfFirst { it.belongsTo(viewer) }
                     if (index >= 0) {
                         this[index] = updatedParticipant
                     } else {
@@ -130,35 +125,32 @@ class PollService(
             repository.save(
                 poll.copy(
                     participants = mergedParticipants,
-                    updatedAt = Instant.now().toString(),
+                    updatedAt = nowIsoString(),
                 ),
             )
         val synced = syncAnnouncement(updatedPoll)
-        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), normalizedTraqId)
+        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), viewer)
     }
 
     suspend fun postComment(
         id: String,
         request: PostCommentRequest,
-        viewerTraqId: String? = null,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
         val poll = requireOpenPoll(id)
-        val normalizedTraqId = viewerTraqId?.trim()?.takeIf { it.isNotBlank() }
-        require(normalizedTraqId != null) { "traQ ID を取得できませんでした。traQ から開き直してください" }
+        val viewer = requireViewer(viewerIdentity)
 
         val commentBody = request.comment.trim()
         require(commentBody.isNotBlank()) { "コメントを入力してください" }
 
-        val normalizedName = normalizedTraqId.lowercase()
         val existingParticipant =
-            poll.participants.firstOrNull {
-                it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-            }
-        val now = Instant.now().toString()
+            poll.participants.firstOrNull { it.belongsTo(viewer) }
+        val now = nowIsoString()
         val updatedParticipant =
             ParticipantRecord(
-                name = normalizedTraqId,
-                traqId = normalizedTraqId,
+                name = viewer.traqId,
+                traqId = viewer.traqId,
+                userId = viewer.userId,
                 note = "",
                 comments =
                     existingParticipant.materializedComments() +
@@ -174,9 +166,7 @@ class PollService(
                 .toMutableList()
                 .apply {
                     val index =
-                        indexOfFirst {
-                            it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-                        }
+                        indexOfFirst { it.belongsTo(viewer) }
                     if (index >= 0) {
                         this[index] = updatedParticipant
                     } else {
@@ -192,42 +182,40 @@ class PollService(
                 ),
             )
         val synced = syncAnnouncement(updatedPoll)
-        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), normalizedTraqId)
+        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), viewer)
     }
 
     suspend fun updateComment(
         id: String,
         request: UpdateCommentRequest,
-        viewerTraqId: String? = null,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
         val poll = requireOpenPoll(id)
-        val normalizedTraqId = viewerTraqId?.trim()?.takeIf { it.isNotBlank() }
-        require(normalizedTraqId != null) { "traQ ID を取得できませんでした。traQ から開き直してください" }
+        val viewer = requireViewer(viewerIdentity)
 
         val commentBody = request.comment.trim()
         require(commentBody.isNotBlank()) { "コメントを入力してください" }
         val createdAt = request.createdAt.trim()
         require(createdAt.isNotBlank()) { "編集するコメントが見つかりません" }
 
-        val normalizedName = normalizedTraqId.lowercase()
         val existingParticipant =
-            poll.participants.firstOrNull {
-                it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-            } ?: throw NoSuchElementException("自分のコメントが見つかりません")
+            poll.participants.firstOrNull { it.belongsTo(viewer) }
+                ?: throw NoSuchElementException("自分のコメントが見つかりません")
 
         val materializedComments = existingParticipant.materializedComments()
         val commentIndex = materializedComments.indexOfFirst { it.createdAt == createdAt }
         require(commentIndex >= 0) { "編集するコメントが見つかりません" }
 
-        val now = Instant.now().toString()
+        val now = nowIsoString()
         val updatedComments =
             materializedComments.toMutableList().apply {
                 this[commentIndex] = this[commentIndex].copy(body = commentBody)
             }
         val updatedParticipant =
             ParticipantRecord(
-                name = normalizedTraqId,
-                traqId = normalizedTraqId,
+                name = viewer.traqId,
+                traqId = viewer.traqId,
+                userId = viewer.userId,
                 note = "",
                 comments = updatedComments,
                 responses = buildParticipantResponses(poll.candidateDates, existingParticipant.responses),
@@ -238,9 +226,7 @@ class PollService(
                 .toMutableList()
                 .apply {
                     val index =
-                        indexOfFirst {
-                            it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-                        }
+                        indexOfFirst { it.belongsTo(viewer) }
                     this[index] = updatedParticipant
                 }.sortedBy { (it.traqId ?: it.name).lowercase() }
 
@@ -252,36 +238,34 @@ class PollService(
                 ),
             )
         val synced = syncAnnouncement(updatedPoll)
-        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), normalizedTraqId)
+        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), viewer)
     }
 
     suspend fun deleteComment(
         id: String,
         request: DeleteCommentRequest,
-        viewerTraqId: String? = null,
+        viewerIdentity: ViewerIdentity? = null,
     ): PollDetailResponse {
         val poll = requireOpenPoll(id)
-        val normalizedTraqId = viewerTraqId?.trim()?.takeIf { it.isNotBlank() }
-        require(normalizedTraqId != null) { "traQ ID を取得できませんでした。traQ から開き直してください" }
+        val viewer = requireViewer(viewerIdentity)
 
         val createdAt = request.createdAt.trim()
         require(createdAt.isNotBlank()) { "削除するコメントが見つかりません" }
 
-        val normalizedName = normalizedTraqId.lowercase()
         val existingParticipant =
-            poll.participants.firstOrNull {
-                it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-            } ?: throw NoSuchElementException("自分のコメントが見つかりません")
+            poll.participants.firstOrNull { it.belongsTo(viewer) }
+                ?: throw NoSuchElementException("自分のコメントが見つかりません")
 
         val materializedComments = existingParticipant.materializedComments()
         val updatedComments = materializedComments.filterNot { it.createdAt == createdAt }
         require(updatedComments.size != materializedComments.size) { "削除するコメントが見つかりません" }
 
-        val now = Instant.now().toString()
+        val now = nowIsoString()
         val updatedParticipant =
             ParticipantRecord(
-                name = normalizedTraqId,
-                traqId = normalizedTraqId,
+                name = viewer.traqId,
+                traqId = viewer.traqId,
+                userId = viewer.userId,
                 note = "",
                 comments = updatedComments,
                 responses = buildParticipantResponses(poll.candidateDates, existingParticipant.responses),
@@ -292,9 +276,7 @@ class PollService(
                 .toMutableList()
                 .apply {
                     val index =
-                        indexOfFirst {
-                            it.traqId == normalizedTraqId || it.name.trim().lowercase() == normalizedName
-                        }
+                        indexOfFirst { it.belongsTo(viewer) }
                     this[index] = updatedParticipant
                 }.sortedBy { (it.traqId ?: it.name).lowercase() }
 
@@ -306,15 +288,17 @@ class PollService(
                 ),
             )
         val synced = syncAnnouncement(updatedPoll)
-        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), normalizedTraqId)
+        return synced.toDetailResponse(baseUrl, traqBaseUrl, buildSummary(synced), viewer)
     }
 
     private suspend fun requireSetupAccess(
         id: String,
-        token: String,
+        viewerIdentity: ViewerIdentity,
     ): PollRecord {
         val poll = repository.findById(id) ?: throw NoSuchElementException("調整が見つかりません")
-        require(token == poll.setupToken) { "設定用 URL が無効です" }
+        if (!poll.isOrganizer(viewerIdentity)) {
+            throw ForbiddenException("この日程調整を設定できるのは作成者だけです")
+        }
         return poll
     }
 
@@ -326,20 +310,19 @@ class PollService(
 
     private suspend fun syncAnnouncement(poll: PollRecord): PollRecord {
         val gateway = announcementGateway ?: return poll
-        if (poll.state != PollState.OPEN || poll.traqChannelId == null) {
+        if (poll.traqChannelId == null) {
             return poll
         }
 
         return try {
             val summary = buildSummary(poll)
             val content = TraqAnnouncementFormatter.format(poll, summary, baseUrl)
-            val messageId = gateway.publishOrUpdate(poll, content) ?: poll.announcementMessageId
-            val updated =
-                poll.copy(
-                    announcementMessageId = messageId,
-                    updatedAt = Instant.now().toString(),
-                )
-            repository.save(updated)
+            val messageId = gateway.publishOrUpdate(poll, content) ?: return poll
+            if (messageId == poll.announcementMessageId) {
+                return poll
+            }
+            repository.updateAnnouncementMessageId(poll.id, messageId)
+            poll.copy(announcementMessageId = messageId)
         } catch (error: Throwable) {
             println("Failed to sync traQ announcement for poll=${poll.id}: ${error.message}")
             poll
@@ -365,7 +348,7 @@ class PollService(
                 val noCount = responses.count { it == DayAvailability.NO }
                 DaySummaryResponse(
                     date = key,
-                    label = day.format(dayFormatter),
+                    label = formatDateLabel(day),
                     yesCount = yesCount,
                     maybeCount = maybeCount,
                     noCount = noCount,
@@ -399,13 +382,28 @@ class PollService(
         candidateDates: List<String>,
         responses: Map<String, DayAvailability>,
     ): Map<String, DayAvailability> = candidateDates.associateWith { date -> responses[date] ?: DayAvailability.NO }
+
+    private fun requireViewer(viewerIdentity: ViewerIdentity?): ViewerIdentity =
+        requireNotNull(viewerIdentity) {
+            "traQ ユーザーを取得できませんでした。traQ から開き直してください"
+        }
+
+    private fun requireSetupViewer(viewerIdentity: ViewerIdentity?): ViewerIdentity =
+        viewerIdentity ?: throw ForbiddenException("traQ から設定画面を開いてください")
 }
+
+private val JAPANESE_WEEKDAYS = listOf("月", "火", "水", "木", "金", "土", "日")
+
+internal fun formatDateLabel(date: LocalDate): String =
+    "${date.month.ordinal + 1}/${date.day}(${JAPANESE_WEEKDAYS[date.dayOfWeek.ordinal]})"
+
+private fun nowIsoString(): String = Clock.System.now().toString()
 
 private fun PollRecord.toDetailResponse(
     baseUrl: String,
     traqBaseUrl: String,
     summary: PollSummaryResponse,
-    viewerTraqId: String? = null,
+    viewerIdentity: ViewerIdentity? = null,
     includeSetupUrl: Boolean = false,
 ): PollDetailResponse =
     PollDetailResponse(
@@ -418,20 +416,22 @@ private fun PollRecord.toDetailResponse(
         updatedAt = updatedAt,
         participantUrl = "${baseUrl.trimEnd('/')}/polls/$id",
         setupUrl =
-            if (includeSetupUrl) {
-                "${baseUrl.trimEnd('/')}/setup/$id?token=$setupToken"
+            if (includeSetupUrl || (viewerIdentity != null && isOrganizer(viewerIdentity))) {
+                "${baseUrl.trimEnd('/')}/setup/$id"
             } else {
                 null
             },
         announcementMessageId = announcementMessageId?.toString(),
-        viewerTraqId = viewerTraqId,
-        viewerIconUrl = viewerTraqId?.let { traqIconUrl(traqBaseUrl, it) },
+        viewerTraqId = viewerIdentity?.traqId,
+        viewerUserId = viewerIdentity?.userId,
+        viewerIconUrl = viewerIdentity?.traqId?.let { traqIconUrl(traqBaseUrl, it) },
         participants =
             participants.map {
                 val resolvedTraqId = it.traqId ?: it.name.takeIf { name -> name.matches(Regex("^[a-zA-Z0-9_\\-]+$")) }
                 ParticipantResponse(
                     name = resolvedTraqId ?: it.name,
                     traqId = resolvedTraqId,
+                    userId = it.userId,
                     iconUrl = resolvedTraqId?.let { traqId -> traqIconUrl(traqBaseUrl, traqId) },
                     note = it.note,
                     comments = it.toCommentResponses(),
@@ -442,13 +442,16 @@ private fun PollRecord.toDetailResponse(
         summary = summary,
     )
 
-private fun PollRecord.toListItemResponse(baseUrl: String): PollListItemResponse =
+private fun PollListRecord.toListItemResponse(baseUrl: String): PollListItemResponse =
     PollListItemResponse(
         id = id,
         title = title,
         state = state,
         candidateDates = candidateDates,
-        participantCount = participants.size,
+        participantCount = participantCount,
+        respondedByViewer = respondedByViewer,
+        createdByViewer = createdByViewer,
+        viewerResponses = viewerResponses,
         participantUrl = "${baseUrl.trimEnd('/')}/polls/$id",
         updatedAt = updatedAt,
     )
@@ -483,3 +486,16 @@ private fun ParticipantRecord?.materializedComments(): List<ParticipantCommentRe
             }.orEmpty()
     return legacyComments + comments
 }
+
+private fun ParticipantRecord.belongsTo(viewerIdentity: ViewerIdentity): Boolean =
+    userId == viewerIdentity.userId ||
+        (
+            userId == null &&
+                (
+                    traqId.equals(viewerIdentity.traqId, ignoreCase = true) ||
+                        name.equals(viewerIdentity.traqId, ignoreCase = true)
+                )
+        )
+
+internal fun PollRecord.isOrganizer(viewerIdentity: ViewerIdentity): Boolean =
+    organizerUserId == viewerIdentity.userId

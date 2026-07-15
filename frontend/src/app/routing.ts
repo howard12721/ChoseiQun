@@ -1,13 +1,13 @@
 import type { AppRoute } from "./types";
 
 export function resolveRoute(): AppRoute {
+  if (window.location.pathname === "/answers") {
+    return { kind: "answers" };
+  }
+
   const setupMatch = window.location.pathname.match(/^\/setup\/([^/]+)$/);
   if (setupMatch) {
-    const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) {
-      throw new Error("設定URLの token がありません");
-    }
-    return { kind: "setup", id: setupMatch[1], token };
+    return { kind: "setup", id: setupMatch[1] };
   }
 
   const resultsMatch = window.location.pathname.match(/^\/polls\/([^/]+)\/results$/);
@@ -25,6 +25,7 @@ export function resolveRoute(): AppRoute {
 
 export function routeLabel(kind: AppRoute["kind"]) {
   if (kind === "home") return "Home";
+  if (kind === "answers") return "Answers";
   if (kind === "setup") return "Setup";
   if (kind === "results") return "Results";
   return "Poll";

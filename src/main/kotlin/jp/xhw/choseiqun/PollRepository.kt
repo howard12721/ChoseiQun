@@ -1,142 +1,439 @@
 package jp.xhw.choseiqun
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.jetbrains.exposed.v1.core.ReferenceOption
-import org.jetbrains.exposed.v1.core.ResultRow
-import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.core.Table
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.jdbc.Database
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
-import org.jetbrains.exposed.v1.jdbc.deleteWhere
-import org.jetbrains.exposed.v1.jdbc.insert
-import org.jetbrains.exposed.v1.jdbc.selectAll
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.jdbc.update
+import io.github.smyrgeorge.sqlx4k.QueryExecutor
+import io.github.smyrgeorge.sqlx4k.ResultSet
+import io.github.smyrgeorge.sqlx4k.Statement
+import io.github.smyrgeorge.sqlx4k.impl.extensions.asLong
+import io.github.smyrgeorge.sqlx4k.mysql.IMySQL
+import io.github.smyrgeorge.sqlx4k.mysql.mySQL
+import kotlin.uuid.Uuid
 
 class PollRepository(
     config: MariaDbConfig,
 ) {
-    private val database =
-        Database.connect(
-            url = config.jdbcUrl,
-            driver = "org.mariadb.jdbc.Driver",
-            user = config.user,
+    private val database: IMySQL =
+        mySQL(
+            url = config.url,
+            username = config.user,
             password = config.password,
         )
 
-    suspend fun initialize() =
-        dbQuery {
-            SchemaUtils.create(
-                Polls,
-                PollCandidateDates,
-                PollParticipants,
-                ParticipantComments,
-                ParticipantResponses,
-            )
+    suspend fun initialize() {
+        DatabaseMigrator(database).migrate()
+    }
+
+    suspend fun close() {
+        database.close().getOrThrow()
+    }
+
+    suspend fun listUnresolvedOrganizerUserIds(): List<String> =
+        database.transaction {
+            fetchAll(
+                """
+                SELECT DISTINCT organizer_user_id
+                FROM polls
+                WHERE organizer_traq_id IS NULL
+                """.trimIndent(),
+            ).getOrThrow()
+                .rows
+                .map { row -> row.get("organizer_user_id").asString() }
         }
 
+    suspend fun findKnownIdentityByTraqId(traqId: String): ViewerIdentity? =
+        database.transaction {
+            fetchAll(
+                Statement
+                    .create(
+                        """
+                        SELECT organizer_user_id AS user_id,
+                               organizer_traq_id AS traq_id
+                        FROM polls
+                        WHERE organizer_traq_id = :traqId
+                        UNION ALL
+                        SELECT traq_user_id AS user_id,
+                               COALESCE(traq_id, name) AS traq_id
+                        FROM poll_participants
+                        WHERE traq_user_id IS NOT NULL
+                          AND (traq_id = :traqId OR (traq_id IS NULL AND name = :traqId))
+                        LIMIT 1
+                        """.trimIndent(),
+                    ).bind("traqId", traqId),
+            ).getOrThrow()
+                .rows
+                .firstOrNull()
+                ?.toViewerIdentity()
+        }
+
+    suspend fun findKnownIdentityByUserId(userId: String): ViewerIdentity? =
+        database.transaction {
+            fetchAll(
+                Statement
+                    .create(
+                        """
+                        SELECT organizer_user_id AS user_id,
+                               organizer_traq_id AS traq_id
+                        FROM polls
+                        WHERE organizer_user_id = :userId
+                          AND organizer_traq_id IS NOT NULL
+                        UNION ALL
+                        SELECT traq_user_id AS user_id,
+                               COALESCE(traq_id, name) AS traq_id
+                        FROM poll_participants
+                        WHERE traq_user_id = :userId
+                        LIMIT 1
+                        """.trimIndent(),
+                    ).bind("userId", userId),
+            ).getOrThrow()
+                .rows
+                .firstOrNull()
+                ?.toViewerIdentity()
+        }
+
+    suspend fun rememberUserIdentity(
+        identity: ViewerIdentity,
+        aliases: Set<String>,
+    ) {
+        val knownTraqIds =
+            (aliases + identity.traqId)
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .distinctBy(String::lowercase)
+
+        database.transaction {
+            execute(
+                Statement
+                    .create(
+                        """
+                        UPDATE polls
+                        SET organizer_traq_id = :traqId
+                        WHERE organizer_user_id = :userId
+                          AND organizer_traq_id IS NULL
+                        """.trimIndent(),
+                    ).bind("traqId", identity.traqId)
+                    .bind("userId", identity.userId),
+            ).getOrThrow()
+
+            knownTraqIds.forEach { knownTraqId ->
+                execute(
+                    Statement
+                        .create(
+                            """
+                            UPDATE poll_participants
+                            SET traq_user_id = COALESCE(traq_user_id, :userId),
+                                traq_id = COALESCE(traq_id, :traqId)
+                            WHERE (traq_user_id IS NULL OR traq_user_id = :userId)
+                              AND (traq_id = :knownTraqId OR (traq_id IS NULL AND name = :knownTraqId))
+                            """.trimIndent(),
+                        ).bind("userId", identity.userId)
+                        .bind("traqId", identity.traqId)
+                        .bind("knownTraqId", knownTraqId),
+                ).getOrThrow()
+            }
+        }
+    }
+
+    suspend fun updateAnnouncementMessageId(
+        pollId: String,
+        messageId: Uuid,
+    ) {
+        database.transaction {
+            execute(
+                Statement
+                    .create(
+                        """
+                        UPDATE polls
+                        SET announcement_message_id = :messageId
+                        WHERE id = :pollId
+                        """.trimIndent(),
+                    ).bind("messageId", messageId.toByteArray())
+                    .bind("pollId", pollId),
+            ).getOrThrow()
+        }
+    }
+
     suspend fun findById(id: String): PollRecord? =
-        dbQuery {
+        database.transaction {
             readPoll(id)
         }
 
     suspend fun save(record: PollRecord): PollRecord =
-        dbQuery {
-            val updatedRows =
-                Polls.update({ Polls.id eq record.id }) {
-                    it[setupToken] = record.setupToken
-                    it[title] = record.title
-                    it[description] = record.description
-                    it[state] = record.state.name
-                    it[createdAt] = record.createdAt
-                    it[updatedAt] = record.updatedAt
-                    it[organizerUserId] = record.organizerUserId
-                    it[traqChannelId] = record.traqChannelId
-                    it[announcementMessageId] = record.announcementMessageId
-                }
-            if (updatedRows == 0) {
-                Polls.insert {
-                    it[id] = record.id
-                    it[setupToken] = record.setupToken
-                    it[title] = record.title
-                    it[description] = record.description
-                    it[state] = record.state.name
-                    it[createdAt] = record.createdAt
-                    it[updatedAt] = record.updatedAt
-                    it[organizerUserId] = record.organizerUserId
-                    it[traqChannelId] = record.traqChannelId
-                    it[announcementMessageId] = record.announcementMessageId
-                }
+        database.transaction {
+            execute(
+                Statement
+                    .create(
+                        """
+                        INSERT INTO polls (
+                            id,
+                            title,
+                            description,
+                            state,
+                            created_at,
+                            updated_at,
+                            organizer_user_id,
+                            organizer_traq_id,
+                            traq_channel_id,
+                            announcement_message_id
+                        ) VALUES (
+                            :id,
+                            :title,
+                            :description,
+                            :state,
+                            :createdAt,
+                            :updatedAt,
+                            :organizerUserId,
+                            :organizerTraqId,
+                            :traqChannelId,
+                            :announcementMessageId
+                        )
+                        ON DUPLICATE KEY UPDATE
+                            title = VALUES(title),
+                            description = VALUES(description),
+                            state = VALUES(state),
+                            created_at = VALUES(created_at),
+                            updated_at = VALUES(updated_at),
+                            organizer_user_id = VALUES(organizer_user_id),
+                            organizer_traq_id = COALESCE(VALUES(organizer_traq_id), organizer_traq_id),
+                            traq_channel_id = VALUES(traq_channel_id)
+                        """.trimIndent(),
+                    ).bindPoll(record),
+            ).getOrThrow()
+
+            record.organizerTraqId?.let { organizerTraqId ->
+                execute(
+                    Statement
+                        .create(
+                            """
+                            UPDATE polls
+                            SET organizer_traq_id = :organizerTraqId
+                            WHERE organizer_user_id = :organizerUserId
+                              AND organizer_traq_id IS NULL
+                            """.trimIndent(),
+                        ).bind("organizerTraqId", organizerTraqId)
+                        .bind("organizerUserId", record.organizerUserId),
+                ).getOrThrow()
             }
 
-            PollCandidateDates.deleteWhere { pollId eq record.id }
+            execute(
+                Statement
+                    .create("DELETE FROM poll_candidate_dates WHERE poll_id = :pollId")
+                    .bind("pollId", record.id),
+            ).getOrThrow()
             record.candidateDates.forEachIndexed { index, candidateDate ->
-                PollCandidateDates.insert {
-                    it[pollId] = record.id
-                    it[this.candidateDate] = candidateDate
-                    it[sortOrder] = index
-                }
+                execute(
+                    Statement
+                        .create(
+                            """
+                            INSERT INTO poll_candidate_dates (poll_id, candidate_date, sort_order)
+                            VALUES (:pollId, :candidateDate, :sortOrder)
+                            """.trimIndent(),
+                        ).bind("pollId", record.id)
+                        .bind("candidateDate", candidateDate)
+                        .bind("sortOrder", index),
+                ).getOrThrow()
             }
 
-            PollParticipants.deleteWhere { pollId eq record.id }
+            execute(
+                Statement
+                    .create("DELETE FROM poll_participants WHERE poll_id = :pollId")
+                    .bind("pollId", record.id),
+            ).getOrThrow()
             record.participants.forEachIndexed { index, participant ->
+                execute(
+                    Statement
+                        .create(
+                            """
+                            INSERT INTO poll_participants (
+                                poll_id,
+                                name,
+                                traq_id,
+                                traq_user_id,
+                                note,
+                                updated_at,
+                                sort_order
+                            ) VALUES (
+                                :pollId,
+                                :name,
+                                :traqId,
+                                :traqUserId,
+                                :note,
+                                :updatedAt,
+                                :sortOrder
+                            )
+                            """.trimIndent(),
+                        ).bind("pollId", record.id)
+                        .bind("name", participant.name)
+                        .bind("traqId", participant.traqId)
+                        .bind("traqUserId", participant.userId)
+                        .bind("note", participant.note)
+                        .bind("updatedAt", participant.updatedAt)
+                        .bind("sortOrder", index),
+                ).getOrThrow()
+
                 val participantId =
-                    PollParticipants.insert {
-                        it[pollId] = record.id
-                        it[name] = participant.name
-                        it[traqId] = participant.traqId
-                        it[note] = participant.note
-                        it[updatedAt] = participant.updatedAt
-                        it[sortOrder] = index
-                    }[PollParticipants.id]
+                    fetchAll("SELECT LAST_INSERT_ID() AS participant_id")
+                        .getOrThrow()
+                        .rows
+                        .single()
+                        .get("participant_id")
+                        .asLong()
 
                 participant.comments.forEachIndexed { commentIndex, comment ->
-                    ParticipantComments.insert {
-                        it[this.participantId] = participantId
-                        it[body] = comment.body
-                        it[createdAt] = comment.createdAt
-                        it[sortOrder] = commentIndex
-                    }
+                    execute(
+                        Statement
+                            .create(
+                                """
+                                INSERT INTO participant_comments (
+                                    participant_id,
+                                    body,
+                                    created_at,
+                                    sort_order
+                                ) VALUES (
+                                    :participantId,
+                                    :body,
+                                    :createdAt,
+                                    :sortOrder
+                                )
+                                """.trimIndent(),
+                            ).bind("participantId", participantId)
+                            .bind("body", comment.body)
+                            .bind("createdAt", comment.createdAt)
+                            .bind("sortOrder", commentIndex),
+                    ).getOrThrow()
                 }
 
                 participant.responses
-                    .toSortedMap()
+                    .toList()
+                    .sortedBy { (date, _) -> date }
                     .forEach { (date, availability) ->
-                        ParticipantResponses.insert {
-                            it[this.participantId] = participantId
-                            it[responseDate] = date
-                            it[this.availability] = availability.name
-                        }
+                        execute(
+                            Statement
+                                .create(
+                                    """
+                                    INSERT INTO participant_responses (
+                                        participant_id,
+                                        response_date,
+                                        availability
+                                    ) VALUES (
+                                        :participantId,
+                                        :responseDate,
+                                        :availability
+                                    )
+                                    """.trimIndent(),
+                                ).bind("participantId", participantId)
+                                .bind("responseDate", date)
+                                .bind("availability", availability.name),
+                        ).getOrThrow()
                     }
             }
 
             record
         }
 
-    suspend fun list(): List<PollRecord> =
-        dbQuery {
-            Polls
-                .selectAll()
-                .orderBy(Polls.updatedAt to SortOrder.DESC)
-                .mapNotNull { row -> readPoll(row[Polls.id]) }
+    suspend fun listOpenForViewer(viewerUserId: String): List<PollListRecord> =
+        database.transaction {
+            val rows =
+                fetchAll(
+                    Statement
+                        .create(
+                            """
+                            SELECT p.id,
+                                   p.title,
+                                   p.state,
+                                   p.updated_at,
+                                   (
+                                       SELECT COUNT(*)
+                                       FROM poll_participants AS counted_participants
+                                       WHERE counted_participants.poll_id = p.id
+                                   ) AS participant_count,
+                                   CASE
+                                       WHEN p.organizer_user_id = :viewerUserId
+                                       THEN 1
+                                       ELSE 0
+                                   END AS created_by_viewer,
+                                   viewer_participants.participant_id AS viewer_participant_id,
+                                   candidate_dates.candidate_date,
+                                   viewer_responses.availability AS viewer_availability
+                            FROM (
+                                SELECT id AS poll_id
+                                FROM polls
+                                WHERE state = 'OPEN'
+                                  AND organizer_user_id = :viewerUserId
+                                UNION
+                                SELECT answered_polls.poll_id
+                                FROM poll_participants AS answered_polls
+                                INNER JOIN polls AS answered_poll_records
+                                    ON answered_poll_records.id = answered_polls.poll_id
+                                   AND answered_poll_records.state = 'OPEN'
+                                WHERE answered_polls.traq_user_id = :viewerUserId
+                            ) AS visible_polls
+                            INNER JOIN polls AS p
+                                ON p.id = visible_polls.poll_id
+                            LEFT JOIN (
+                                SELECT poll_id, MIN(id) AS participant_id
+                                FROM poll_participants
+                                WHERE traq_user_id = :viewerUserId
+                                GROUP BY poll_id
+                            ) AS viewer_participants
+                                ON viewer_participants.poll_id = p.id
+                            LEFT JOIN poll_candidate_dates AS candidate_dates
+                                ON candidate_dates.poll_id = p.id
+                            LEFT JOIN participant_responses AS viewer_responses
+                                ON viewer_responses.participant_id = viewer_participants.participant_id
+                               AND viewer_responses.response_date = candidate_dates.candidate_date
+                            ORDER BY p.updated_at DESC, candidate_dates.sort_order ASC
+                            """.trimIndent(),
+                        ).bind("viewerUserId", viewerUserId),
+                ).getOrThrow()
+                    .rows
+
+            rows.groupBy { row -> row.get("id").asString() }
+                .values
+                .map { pollRows ->
+                    val first = pollRows.first()
+                    val viewerResponses =
+                        pollRows.mapNotNull { row ->
+                            val date = row.get("candidate_date").asStringOrNull() ?: return@mapNotNull null
+                            val availability = row.get("viewer_availability").asStringOrNull() ?: return@mapNotNull null
+                            date to DayAvailability.valueOf(availability)
+                        }.toMap()
+                    PollListRecord(
+                        id = first.get("id").asString(),
+                        title = first.get("title").asString(),
+                        state = PollState.valueOf(first.get("state").asString()),
+                        candidateDates = pollRows.mapNotNull { row -> row.get("candidate_date").asStringOrNull() },
+                        participantCount = first.get("participant_count").asLong().toInt(),
+                        respondedByViewer = first.get("viewer_participant_id").asStringOrNull() != null,
+                        createdByViewer = first.get("created_by_viewer").asLong() == 1L,
+                        viewerResponses = viewerResponses,
+                        updatedAt = first.get("updated_at").asString(),
+                    )
+                }
         }
 
-    private suspend fun <T> dbQuery(block: () -> T): T =
-        withContext(Dispatchers.IO) {
-            transaction(database) {
-                block()
-            }
-        }
-
-    private fun readPoll(id: String): PollRecord? {
+    private suspend fun QueryExecutor.readPoll(id: String): PollRecord? {
         val poll =
-            Polls
-                .selectAll()
-                .where { Polls.id eq id }
+            fetchAll(
+                Statement
+                    .create(
+                        """
+                        SELECT id,
+                               title,
+                               description,
+                               state,
+                               created_at,
+                               updated_at,
+                               organizer_user_id,
+                               organizer_traq_id,
+                               HEX(traq_channel_id) AS traq_channel_id_hex,
+                               HEX(announcement_message_id) AS announcement_message_id_hex
+                        FROM polls
+                        WHERE id = :id
+                        """.trimIndent(),
+                    ).bind("id", id),
+            ).getOrThrow()
+                .rows
                 .singleOrNull()
-                ?.let(::toPollRecordBase)
+                ?.toPollRecordBase()
                 ?: return null
 
         return poll.copy(
@@ -145,116 +442,137 @@ class PollRepository(
         )
     }
 
-    private fun readCandidateDates(pollId: String): List<String> =
-        PollCandidateDates
-            .selectAll()
-            .where { PollCandidateDates.pollId eq pollId }
-            .orderBy(PollCandidateDates.sortOrder to SortOrder.ASC)
-            .map { it[PollCandidateDates.candidateDate] }
+    private suspend fun QueryExecutor.readCandidateDates(pollId: String): List<String> =
+        fetchAll(
+            Statement
+                .create(
+                    """
+                    SELECT candidate_date
+                    FROM poll_candidate_dates
+                    WHERE poll_id = :pollId
+                    ORDER BY sort_order ASC
+                    """.trimIndent(),
+                ).bind("pollId", pollId),
+        ).getOrThrow()
+            .rows
+            .map { row -> row.get("candidate_date").asString() }
 
-    private fun readParticipants(pollId: String): List<ParticipantRecord> =
-        PollParticipants
-            .selectAll()
-            .where { PollParticipants.pollId eq pollId }
-            .orderBy(PollParticipants.sortOrder to SortOrder.ASC)
-            .map { row ->
-                val participantId = row[PollParticipants.id]
-                ParticipantRecord(
-                    name = row[PollParticipants.name],
-                    traqId = row[PollParticipants.traqId],
-                    note = row[PollParticipants.note],
-                    comments = readComments(participantId),
-                    responses = readResponses(participantId),
-                    updatedAt = row[PollParticipants.updatedAt],
-                )
-            }
+    private suspend fun QueryExecutor.readParticipants(pollId: String): List<ParticipantRecord> {
+        val participantRows =
+            fetchAll(
+                Statement
+                    .create(
+                        """
+                        SELECT id, name, traq_id, traq_user_id, note, updated_at
+                        FROM poll_participants
+                        WHERE poll_id = :pollId
+                        ORDER BY sort_order ASC
+                        """.trimIndent(),
+                    ).bind("pollId", pollId),
+            ).getOrThrow()
+                .rows
+        if (participantRows.isEmpty()) {
+            return emptyList()
+        }
 
-    private fun readComments(participantId: Long): List<ParticipantCommentRecord> =
-        ParticipantComments
-            .selectAll()
-            .where { ParticipantComments.participantId eq participantId }
-            .orderBy(ParticipantComments.sortOrder to SortOrder.ASC)
-            .map { row ->
-                ParticipantCommentRecord(
-                    body = row[ParticipantComments.body],
-                    createdAt = row[ParticipantComments.createdAt],
-                )
-            }
+        val commentsByParticipantId =
+            fetchAll(
+                Statement
+                    .create(
+                        """
+                        SELECT comments.participant_id,
+                               comments.body,
+                               comments.created_at
+                        FROM participant_comments AS comments
+                        INNER JOIN poll_participants AS participants
+                            ON participants.id = comments.participant_id
+                        WHERE participants.poll_id = :pollId
+                        ORDER BY comments.participant_id ASC, comments.sort_order ASC
+                        """.trimIndent(),
+                    ).bind("pollId", pollId),
+            ).getOrThrow()
+                .rows
+                .groupBy { row -> row.get("participant_id").asLong() }
 
-    private fun readResponses(participantId: Long): Map<String, DayAvailability> =
-        ParticipantResponses
-            .selectAll()
-            .where { ParticipantResponses.participantId eq participantId }
-            .orderBy(ParticipantResponses.responseDate to SortOrder.ASC)
-            .associate { row ->
-                row[ParticipantResponses.responseDate] to DayAvailability.valueOf(row[ParticipantResponses.availability])
-            }
+        val responsesByParticipantId =
+            fetchAll(
+                Statement
+                    .create(
+                        """
+                        SELECT responses.participant_id,
+                               responses.response_date,
+                               responses.availability
+                        FROM participant_responses AS responses
+                        INNER JOIN poll_participants AS participants
+                            ON participants.id = responses.participant_id
+                        WHERE participants.poll_id = :pollId
+                        ORDER BY responses.participant_id ASC, responses.response_date ASC
+                        """.trimIndent(),
+                    ).bind("pollId", pollId),
+            ).getOrThrow()
+                .rows
+                .groupBy { row -> row.get("participant_id").asLong() }
 
-    private fun toPollRecordBase(row: ResultRow): PollRecord =
-        PollRecord(
-            id = row[Polls.id],
-            setupToken = row[Polls.setupToken],
-            title = row[Polls.title],
-            description = row[Polls.description],
-            state = PollState.valueOf(row[Polls.state]),
-            candidateDates = emptyList(),
-            createdAt = row[Polls.createdAt],
-            updatedAt = row[Polls.updatedAt],
-            organizerUserId = row[Polls.organizerUserId],
-            traqChannelId = row[Polls.traqChannelId],
-            announcementMessageId = row[Polls.announcementMessageId],
-            participants = emptyList(),
-        )
+        return participantRows.map { row ->
+            val participantId = row.get("id").asLong()
+            ParticipantRecord(
+                name = row.get("name").asString(),
+                traqId = row.get("traq_id").asStringOrNull(),
+                userId = row.get("traq_user_id").asStringOrNull(),
+                note = row.get("note").asString(),
+                comments =
+                    commentsByParticipantId[participantId].orEmpty().map { commentRow ->
+                        ParticipantCommentRecord(
+                            body = commentRow.get("body").asString(),
+                            createdAt = commentRow.get("created_at").asString(),
+                        )
+                    },
+                responses =
+                    responsesByParticipantId[participantId].orEmpty().associate { responseRow ->
+                        responseRow.get("response_date").asString() to
+                            DayAvailability.valueOf(responseRow.get("availability").asString())
+                    },
+                updatedAt = row.get("updated_at").asString(),
+            )
+        }
+    }
 }
 
-private object Polls : Table("polls") {
-    val id = varchar("id", 64)
-    val setupToken = varchar("setup_token", 255)
-    val title = varchar("title", 255)
-    val description = text("description")
-    val state = varchar("state", 32)
-    val createdAt = varchar("created_at", 64)
-    val updatedAt = varchar("updated_at", 64)
-    val organizerUserId = varchar("organizer_user_id", 255)
-    val traqChannelId = uuid("traq_channel_id").nullable()
-    val announcementMessageId = uuid("announcement_message_id").nullable()
+private fun Statement.bindPoll(record: PollRecord): Statement =
+    bind("id", record.id)
+        .bind("title", record.title)
+        .bind("description", record.description)
+        .bind("state", record.state.name)
+        .bind("createdAt", record.createdAt)
+        .bind("updatedAt", record.updatedAt)
+        .bind("organizerUserId", record.organizerUserId)
+        .bind("organizerTraqId", record.organizerTraqId)
+        .bind("traqChannelId", record.traqChannelId?.toByteArray())
+        .bind("announcementMessageId", record.announcementMessageId?.toByteArray())
 
-    override val primaryKey = PrimaryKey(id)
-}
+private fun ResultSet.Row.toPollRecordBase(): PollRecord =
+    PollRecord(
+        id = get("id").asString(),
+        title = get("title").asString(),
+        description = get("description").asString(),
+        state = PollState.valueOf(get("state").asString()),
+        candidateDates = emptyList(),
+        createdAt = get("created_at").asString(),
+        updatedAt = get("updated_at").asString(),
+        organizerUserId = get("organizer_user_id").asString(),
+        organizerTraqId = get("organizer_traq_id").asStringOrNull(),
+        traqChannelId = get("traq_channel_id_hex").asUuidFromHexOrNull(),
+        announcementMessageId = get("announcement_message_id_hex").asUuidFromHexOrNull(),
+        participants = emptyList(),
+    )
 
-private object PollCandidateDates : Table("poll_candidate_dates") {
-    val pollId = varchar("poll_id", 64).references(Polls.id, onDelete = ReferenceOption.CASCADE)
-    val candidateDate = varchar("candidate_date", 10)
-    val sortOrder = integer("sort_order")
+private fun ResultSet.Row.toViewerIdentity(): ViewerIdentity =
+    ViewerIdentity(
+        userId = get("user_id").asString(),
+        traqId = get("traq_id").asString(),
+    )
 
-    override val primaryKey = PrimaryKey(pollId, candidateDate)
-}
-
-private object PollParticipants : Table("poll_participants") {
-    val id = long("id").autoIncrement()
-    val pollId = varchar("poll_id", 64).references(Polls.id, onDelete = ReferenceOption.CASCADE)
-    val name = varchar("name", 255)
-    val traqId = varchar("traq_id", 255).nullable()
-    val note = text("note")
-    val updatedAt = varchar("updated_at", 64)
-    val sortOrder = integer("sort_order")
-
-    override val primaryKey = PrimaryKey(id)
-}
-
-private object ParticipantComments : Table("participant_comments") {
-    val participantId = long("participant_id").references(PollParticipants.id, onDelete = ReferenceOption.CASCADE)
-    val body = text("body")
-    val createdAt = varchar("created_at", 64)
-    val sortOrder = integer("sort_order")
-
-    override val primaryKey = PrimaryKey(participantId, createdAt, sortOrder)
-}
-
-private object ParticipantResponses : Table("participant_responses") {
-    val participantId = long("participant_id").references(PollParticipants.id, onDelete = ReferenceOption.CASCADE)
-    val responseDate = varchar("response_date", 10)
-    val availability = varchar("availability", 16)
-
-    override val primaryKey = PrimaryKey(participantId, responseDate)
-}
+private fun ResultSet.Row.Column.asUuidFromHexOrNull(): Uuid? =
+    asStringOrNull()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let(Uuid::parseHex)

@@ -1,13 +1,10 @@
 package jp.xhw.choseiqun
 
-import jp.xhw.trakt.bot.TraktClient
-import jp.xhw.trakt.bot.scope.fetchChannel
-import jp.xhw.trakt.bot.scope.fetchMessage
-import jp.xhw.trakt.bot.scope.sendMessage
-import jp.xhw.trakt.bot.scope.update
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.*
+import jp.xhw.trakt.bot.context.base.*
+import jp.xhw.trakt.bot.infrastructure.client.TraktClient
+import jp.xhw.trakt.bot.model.ChannelId
+import jp.xhw.trakt.bot.model.MessageId
+import kotlinx.datetime.LocalDate
 import kotlin.uuid.Uuid
 
 interface PollAnnouncementGateway {
@@ -27,12 +24,12 @@ class TraqAnnouncementGateway(
         var messageId: Uuid? = poll.announcementMessageId
         client.execute {
             if (poll.announcementMessageId == null) {
-                val channelId = poll.traqChannelId ?: return@execute
+                val channelId = poll.traqChannelId?.let(::ChannelId) ?: return@execute
                 val channel = fetchChannel(channelId)
                 val message = channel.sendMessage(content)
                 messageId = message.id.value
             } else {
-                val message = fetchMessage(poll.announcementMessageId)
+                val message = fetchMessage(MessageId(poll.announcementMessageId))
                 message.update(content)
             }
         }
@@ -41,8 +38,6 @@ class TraqAnnouncementGateway(
 }
 
 object TraqAnnouncementFormatter {
-    private val dateLabelFormatter = DateTimeFormatter.ofPattern("M/d(E)", Locale.JAPANESE)
-
     fun format(
         poll: PollRecord,
         summary: PollSummaryResponse,
@@ -54,17 +49,27 @@ object TraqAnnouncementFormatter {
         if (poll.description.isNotBlank()) {
             lines += poll.description
         }
+        if (poll.state == PollState.DRAFT) {
+            lines += "設定URL: ${baseUrl.trimEnd('/')}/setup/${poll.id}"
+            return lines.joinToString("\n")
+        }
         lines += "参加者向けリンク: $participantUrl"
         lines += "回答者: ${poll.participants.map { it.traqId }.joinToString("") { ":@$it:" }}"
         if (poll.candidateDates.isNotEmpty()) {
             lines += ""
             lines += "日ごとの回答:"
             poll.candidateDates.forEach { date ->
-                val label = LocalDate.parse(date).format(dateLabelFormatter)
+                val label = formatDateLabel(LocalDate.parse(date))
                 val yesParticipants = poll.participants.filterByAvailability(date, DayAvailability.YES)
                 val maybeParticipants = poll.participants.filterByAvailability(date, DayAvailability.MAYBE)
                 lines += "$label: ${formatAvailabilityLine(yesParticipants, maybeParticipants)}"
             }
+        }
+        val participantComments = poll.participants.flatMap(::formatParticipantComments)
+        if (participantComments.isNotEmpty()) {
+            lines += ""
+            lines += "コメント:"
+            lines += participantComments
         }
         return lines.joinToString("\n")
     }
@@ -77,6 +82,22 @@ object TraqAnnouncementFormatter {
             .map(::formatParticipant)
 
     private fun formatParticipant(participant: ParticipantRecord): String = participant.traqId?.let { ":@$it:" } ?: participant.name
+
+    private fun formatParticipantComments(participant: ParticipantRecord): List<String> {
+        val commentBodies =
+            buildList {
+                participant.note.takeIf { it.isNotBlank() }?.let(::add)
+                participant.comments.mapTo(this) { it.body }
+            }.map(::formatCommentBody)
+                .filter { it.isNotBlank() }
+        return commentBodies.map { "- ${formatParticipant(participant)} — $it" }
+    }
+
+    private fun formatCommentBody(body: String): String =
+        body.lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .joinToString(" / ")
 
     private fun formatAvailabilityLine(
         yesParticipants: List<String>,

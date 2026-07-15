@@ -17,10 +17,16 @@ enum class DayAvailability {
     NO,
 }
 
+data class ViewerIdentity(
+    val userId: String,
+    val traqId: String,
+)
+
 @Serializable
 data class ParticipantRecord(
     val name: String,
     val traqId: String? = null,
+    val userId: String? = null,
     val note: String = "",
     val comments: List<ParticipantCommentRecord> = emptyList(),
     val responses: Map<String, DayAvailability> = emptyMap(),
@@ -36,7 +42,6 @@ data class ParticipantCommentRecord(
 @Serializable
 data class PollRecord(
     val id: String,
-    val setupToken: String,
     val title: String,
     val description: String = "",
     val state: PollState = PollState.DRAFT,
@@ -44,6 +49,7 @@ data class PollRecord(
     val createdAt: String,
     val updatedAt: String,
     val organizerUserId: String,
+    val organizerTraqId: String? = null,
     val traqChannelId: Uuid? = null,
     val announcementMessageId: Uuid? = null,
     val participants: List<ParticipantRecord> = emptyList(),
@@ -54,10 +60,15 @@ data class ApiError(
     val message: String,
 )
 
+class ForbiddenException(
+    message: String,
+) : RuntimeException(message)
+
 @Serializable
 data class CreateDraftPollCommand(
     val title: String,
     val organizerUserId: String,
+    val organizerTraqId: String,
     val traqChannelId: Uuid,
 )
 
@@ -112,6 +123,7 @@ data class PollSummaryResponse(
 data class ParticipantResponse(
     val name: String,
     val traqId: String? = null,
+    val userId: String? = null,
     val iconUrl: String? = null,
     val note: String,
     val comments: List<ParticipantCommentResponse> = emptyList(),
@@ -138,6 +150,7 @@ data class PollDetailResponse(
     val setupUrl: String? = null,
     val announcementMessageId: String? = null,
     val viewerTraqId: String? = null,
+    val viewerUserId: String? = null,
     val viewerIconUrl: String? = null,
     val participants: List<ParticipantResponse>,
     val summary: PollSummaryResponse,
@@ -150,6 +163,21 @@ data class PollListItemResponse(
     val state: PollState,
     val candidateDates: List<String> = emptyList(),
     val participantCount: Int,
+    val respondedByViewer: Boolean = false,
+    val createdByViewer: Boolean = false,
+    val viewerResponses: Map<String, DayAvailability> = emptyMap(),
     val participantUrl: String,
+    val updatedAt: String,
+)
+
+data class PollListRecord(
+    val id: String,
+    val title: String,
+    val state: PollState,
+    val candidateDates: List<String>,
+    val participantCount: Int,
+    val respondedByViewer: Boolean,
+    val createdByViewer: Boolean,
+    val viewerResponses: Map<String, DayAvailability>,
     val updatedAt: String,
 )

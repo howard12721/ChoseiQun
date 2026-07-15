@@ -1,12 +1,12 @@
 package jp.xhw.choseiqun
 
-import jp.xhw.trakt.bot.TraktClient
-import jp.xhw.trakt.bot.model.MessageCreated
-import jp.xhw.trakt.bot.scope.BotScope
-import jp.xhw.trakt.bot.scope.sendDirectMessage
-import jp.xhw.trakt.bot.scope.sendMessage
-import kotlinx.coroutines.delay
-import java.util.concurrent.atomic.AtomicBoolean
+import jp.xhw.trakt.bot.context.base.sendMessage
+import jp.xhw.trakt.bot.context.bot.BotContext
+import jp.xhw.trakt.bot.context.bot.fetchMe
+import jp.xhw.trakt.bot.infrastructure.client.TraktClient
+import jp.xhw.trakt.bot.infrastructure.client.runtime
+import jp.xhw.trakt.bot.model.BotEvents
+import jp.xhw.trakt.bot.onMessageCreated
 import kotlin.uuid.Uuid
 
 data class TraqBotConfig(
@@ -15,62 +15,58 @@ data class TraqBotConfig(
     val traqOrigin: String,
 )
 
-private val BOT_MENTION_PATTERN =
-    Regex("""^!\{"type":"user","raw":"(?:\\.|[^"\\])*","id":"019d2e1e-a0f8-724a-830a-46678645aab6"\}""")
+internal fun extractBotMentionPrefix(
+    content: String,
+    botUserId: Uuid,
+): String? =
+    Regex(
+        """^!\{"type":"user","raw":"(?:\\.|[^"\\])*","id":"${Regex.escape(botUserId.toString())}"}""",
+    ).find(content)?.value
 
-internal fun extractBotMentionPrefix(content: String): String? = BOT_MENTION_PATTERN.find(content)?.value
-
-class TraqBotRunner(
+class TraqBotRunner private constructor(
     private val client: TraktClient,
     private val pollService: PollService,
-    private val baseUrl: String,
+    private val identityDirectory: TraqIdentityDirectory,
+    private val botUserId: Uuid,
 ) {
-    private val stopRequested = AtomicBoolean(false)
+    private val runtime =
+        client.runtime {
+            onMessageCreated { event ->
+                handleMessage(event)
+            }
+        }
 
-    init {
-        client.on<MessageCreated> { event ->
-            handleMessage(event)
+    companion object {
+        suspend fun create(
+            client: TraktClient,
+            pollService: PollService,
+            identityDirectory: TraqIdentityDirectory,
+        ): TraqBotRunner {
+            var botUserId: Uuid? = null
+            client.execute {
+                botUserId = fetchMe().id.value
+            }
+            return TraqBotRunner(
+                client = client,
+                pollService = pollService,
+                identityDirectory = identityDirectory,
+                botUserId = requireNotNull(botUserId) { "Bot User IDを取得できませんでした" },
+            )
         }
     }
 
     suspend fun run() {
-        stopRequested.set(false)
-
-        while (!stopRequested.get()) {
-            try {
-                client.start()
-                if (!stopRequested.get()) {
-                    println("traQ bot session ended unexpectedly. Reconnecting in 3 seconds...")
-                }
-            } catch (error: Throwable) {
-                if (!stopRequested.get()) {
-                    println("traQ bot crashed: ${error.message}. Reconnecting in 3 seconds...")
-                    error.printStackTrace()
-                }
-            } finally {
-                runCatching { client.stop() }
-                    .onFailure {
-                        if (!stopRequested.get()) {
-                            println("Failed to stop traQ bot client cleanly: ${it.message}")
-                        }
-                    }
-            }
-
-            if (!stopRequested.get()) {
-                delay(3_000)
-            }
-        }
+        runtime.run()
     }
 
     suspend fun stop() {
-        stopRequested.set(true)
-        client.stop()
+        runtime.stop()
     }
 
-    context(botScope: BotScope)
-    private suspend fun handleMessage(event: MessageCreated) {
+    context(_: BotContext)
+    private suspend fun handleMessage(event: BotEvents.MessageCreated) {
         val content = event.message.content.trim()
-        val botMentionPrefix = extractBotMentionPrefix(content) ?: return
+        val botMentionPrefix = extractBotMentionPrefix(content, botUserId) ?: return
 
         when {
             content == botMentionPrefix -> {
@@ -79,26 +75,23 @@ class TraqBotRunner(
 
             else -> {
                 val title = content.removePrefix(botMentionPrefix).trim()
+                val organizer = identityDirectory.resolveByUserId(event.message.author.id.value.toString())
+                if (organizer == null) {
+                    event.message.channel.sendMessage("ユーザー情報を取得できませんでした。しばらくしてから再試行してください。")
+                    return
+                }
                 val poll =
-                    pollService.createDraftPoll(
+                    this@TraqBotRunner.pollService.createDraftPoll(
                         CreateDraftPollCommand(
                             title = title.ifBlank { "日程調整" },
-                            organizerUserId = event.message.authorId.toString(),
-                            traqChannelId = event.message.channelId.value,
+                            organizerUserId = organizer.userId,
+                            organizerTraqId = organizer.traqId,
+                            traqChannelId = event.message.channel.id.value,
                         ),
                     )
-                val setupUrl = "${baseUrl.trimEnd('/')}/setup/${poll.id}?token=${poll.setupToken}"
-                event.message.author.sendDirectMessage(
-                    buildString {
-                        appendLine("日程調整の設定URLです。")
-                        appendLine(setupUrl)
-                        appendLine()
-                        append("設定完了後、元のチャンネルにリンクを公開します。")
-                    },
-                )
-                event.message.channel.sendMessage(
-                    "設定URLをDMしました。",
-                )
+                if (poll.announcementMessageId == null) {
+                    event.message.channel.sendMessage("日程調整のサマリーメッセージを表示できませんでした。")
+                }
             }
         }
     }
