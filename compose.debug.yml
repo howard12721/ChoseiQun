@@ -23,7 +23,7 @@ services:
     platform: linux/amd64
     build:
       context: .
-      dockerfile: .github/docker/debug.Dockerfile
+      dockerfile: Dockerfile.debug
     environment:
       PORT: "8080"
       PUBLIC_BASE_URL: "http://localhost:${FRONTEND_PORT:-5173}"
