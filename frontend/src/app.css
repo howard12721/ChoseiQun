@@ -1565,9 +1565,17 @@ textarea:focus-visible,
     flex-direction: column;
   }
 
+  .response-matrix {
+    min-width: 100%;
+  }
+
   .response-matrix thead th:first-child,
   .response-matrix tbody th:first-child {
     width: 4.5rem;
+    min-width: 4.5rem;
+  }
+
+  .response-matrix tr > :not(:first-child) {
     min-width: 4.5rem;
   }
 
