@@ -5,17 +5,20 @@ import { copyAndNotify } from "../shared/lib/clipboard";
 import { ErrorRoute, LoadingRoute } from "../shared/ui/RouteState";
 import { Shell } from "../shared/ui/Shell";
 
-export function HomeRoute() {
+export function HomeRoute({ list }: { list?: "created" | "answered" }) {
   const polls = usePollList();
   const { flash, dismissFlash, showFlash } = useFlash();
 
   return (
     <Shell flash={flash} onDismissFlash={dismissFlash}>
       {polls.loading ? <LoadingRoute /> : null}
-      {!polls.loading && polls.error ? <ErrorRoute error={polls.error} onRetry={polls.reload} /> : null}
+      {!polls.loading && polls.error ? (
+        <ErrorRoute error={polls.error} onRetry={polls.reload} />
+      ) : null}
       {!polls.loading && !polls.error && polls.data ? (
         <HomePage
           openPolls={polls.data}
+          list={list}
           onCopy={(value) => copyAndNotify(value, showFlash)}
         />
       ) : null}

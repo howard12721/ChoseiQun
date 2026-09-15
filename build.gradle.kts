@@ -24,6 +24,13 @@ kotlin {
         }
     }
 
+    if (providers.gradleProperty("preview").isPresent) {
+        nativeTarget.binaries.executable("preview", listOf(org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.DEBUG)) {
+            compilation = nativeTarget.compilations.getByName("test")
+            entryPoint = "jp.xhw.choseiqun.previewMain"
+        }
+    }
+
     nativeTarget.compilations.getByName("main").defaultSourceSet.apply {
         kotlin.srcDir("src/main/kotlin")
         dependencies {

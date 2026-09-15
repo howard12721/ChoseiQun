@@ -20,6 +20,8 @@ https://chosei.trap.show/
 
 起動時に未適用のマイグレーションだけをバージョン順に適用し、`schema_migrations` にバージョン・名前・チェックサムを記録します。スキーマを変更するときは `src/main/kotlin/jp/xhw/choseiqun/infrastructure/persistence/DatabaseMigrator.kt` の末尾へ次の連番を追加し、適用済みのマイグレーションは変更しないでください。
 
+v4では日付のみの既存イベントを保持しながら時間帯付き候補へ対応します。[スキーマ・API・適用手順・検証方法](docs/timed-events.md)を参照してください。
+
 ## ローカルデバッグ
 
 MariaDB、Native デバッグ版バックエンド、Vite 開発サーバーをまとめて起動します。

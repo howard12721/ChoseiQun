@@ -10,7 +10,7 @@ export default function App() {
   const route = useMemo(() => resolveRoute(), []);
 
   if (route.kind === "home") {
-    return <HomeRoute />;
+    return <HomeRoute list={route.list} />;
   }
   if (route.kind === "answers") {
     return <AnswersRoute />;

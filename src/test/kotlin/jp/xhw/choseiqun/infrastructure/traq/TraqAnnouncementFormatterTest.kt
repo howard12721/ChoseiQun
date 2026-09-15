@@ -3,6 +3,8 @@ package jp.xhw.choseiqun.infrastructure.traq
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.ParticipantCommentRecord
 import jp.xhw.choseiqun.domain.ParticipantRecord
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.PollRecord
 import jp.xhw.choseiqun.domain.PollState
 import kotlin.test.Test
@@ -18,7 +20,7 @@ class TraqAnnouncementFormatterTest {
                 id = "poll1234",
                 title = "会議日程",
                 state = PollState.OPEN,
-                candidateDates = listOf("2024-03-03", "2024-03-04"),
+                candidates = listOf("2024-03-03", "2024-03-04").map { PollCandidate(it) },
                 createdAt = "2024-03-01T00:00:00Z",
                 updatedAt = "2024-03-01T00:00:00Z",
                 organizerUserId = "organizer",
@@ -61,7 +63,7 @@ class TraqAnnouncementFormatterTest {
                 id = "poll1234",
                 title = "会議日程",
                 state = PollState.OPEN,
-                candidateDates = emptyList(),
+                candidates = emptyList(),
                 createdAt = "2024-03-01T00:00:00Z",
                 updatedAt = "2024-03-01T00:00:00Z",
                 organizerUserId = "organizer",

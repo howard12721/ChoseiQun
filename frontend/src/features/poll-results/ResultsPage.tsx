@@ -1,17 +1,20 @@
+import { useState } from "react";
 import { ResultStatusBadge } from "../../entities/poll/AvailabilityStatus";
 import { Avatar } from "../../entities/poll/Avatar";
 import type { PollDetail } from "../../entities/poll/model";
 import {
   bestSummaryDay,
+  candidateTime,
   isViewerParticipant,
   participantCommentsForDisplay,
+  pollCandidates,
   resolveParticipantIconUrl,
-  resolveTraqId,
 } from "../../entities/poll/selectors";
-import { formatMonthDay, sortDates } from "../../shared/lib/date";
+import { formatCommentTimestamp, formatDateLabel } from "../../shared/lib/date";
+import { Icon } from "../../shared/ui/Icon";
+import { ConfirmDialog } from "../../shared/ui/ConfirmDialog";
 import { CommentPanel } from "./comments/CommentPanel";
 import type { CommentDraft } from "./comments/model";
-import { ParticipantComments } from "./comments/ParticipantComments";
 
 export function ResultsPage(props: {
   poll: PollDetail;
@@ -22,7 +25,6 @@ export function ResultsPage(props: {
   onDeleteComment: (createdAt: string) => void;
   isCommentBusy: boolean;
   onSubmit: (formData: FormData) => Promise<void>;
-  onCopy: (value: string) => void;
 }) {
   const {
     poll,
@@ -33,179 +35,193 @@ export function ResultsPage(props: {
     onDeleteComment,
     isCommentBusy,
     onSubmit,
-    onCopy,
   } = props;
-  const sortedDates = sortDates(poll.candidateDates);
+  const [pendingDeletion, setPendingDeletion] = useState<string | null>(null);
+  const candidates = pollCandidates(poll);
   const bestDay = poll.participants.length ? bestSummaryDay(poll) : undefined;
-  const ownParticipant = poll.participants.find((participant) => isViewerParticipant(participant, poll));
-  const ownComments = ownParticipant ? participantCommentsForDisplay(ownParticipant) : [];
-  const isEditingComment = Boolean(commentDraft.editingCreatedAt);
-  const commenters = poll.participants.filter(
-    (participant) => participantCommentsForDisplay(participant).length > 0,
-  );
-  const totalCommentCount = commenters.reduce(
-    (count, participant) => count + participantCommentsForDisplay(participant).length,
-    0,
-  );
+  const comments = poll.participants
+    .flatMap((participant) =>
+      participantCommentsForDisplay(participant).map((comment) => ({
+        participant,
+        comment,
+      })),
+    )
+    .sort((a, b) => a.comment.createdAt.localeCompare(b.comment.createdAt));
 
   return (
     <>
-      <section className="page-header">
-        <div className="page-header-title-row">
-          <h1>{poll.title}</h1>
-          <div className="button-row page-header-actions">
-            {poll.setupUrl ? (
-              <a className="secondary-button" href={poll.setupUrl}>
-                設定
-              </a>
-            ) : null}
-            <button className="secondary-button" type="button" onClick={() => onCopy(window.location.href)}>
-              リンクをコピー
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="results-stack">
-        <div className="dashboard-card stack">
+      <header className="page-header">
+        <h1>{poll.title}</h1>
+      </header>
+      <div className="results-stack">
+        <section className="stack results-matrix-section">
           <div className="section-head">
-            <h2>日別集計</h2>
+            <h2>
+              <Icon name="users" />
+              参加者ごとの回答
+            </h2>
+            <span className="best-legend">
+              <Icon name="star" />
+              最高評価
+            </span>
           </div>
-          {poll.summary.days.length ? (
-            <div className="results-table-wrap">
-              <table className="results-table">
-                <caption className="visually-hidden">候補日ごとの回答集計</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">日付</th>
-                    <th scope="col"><span className="table-status-heading"><ResultStatusBadge value="YES" decorative /><span>参加可</span></span></th>
-                    <th scope="col"><span className="table-status-heading"><ResultStatusBadge value="MAYBE" decorative /><span>たぶん</span></span></th>
-                    <th scope="col"><span className="table-status-heading"><ResultStatusBadge value="NO" decorative /><span>不可</span></span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...poll.summary.days]
-                    .sort((left, right) => left.date.localeCompare(right.date))
-                    .map((day) => (
-                      <tr className={day.date === bestDay?.date ? "is-best-day" : ""} key={day.date}>
-                        <th scope="row">
-                          <div className="availability-date">{day.label}</div>
-                          <div className="availability-date-subtle">{day.date}</div>
-                        </th>
-                        <td>{day.yesCount}</td>
-                        <td>{day.maybeCount}</td>
-                        <td>{day.noCount}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="empty-state">まだ集計できる回答がありません。</div>
-          )}
-        </div>
-
-        <div className="dashboard-card stack">
-          <div className="section-head">
-            <h2>参加者ごとの回答</h2>
-          </div>
-          {poll.participants.length ? (
-            <div className="results-table-wrap">
-              <table className="results-table response-matrix">
-                <caption className="visually-hidden">参加者ごとの候補日への回答</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">参加者</th>
-                    {sortedDates.map((date) => (
-                      <th scope="col" key={date}>{formatMonthDay(date)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {poll.participants.map((participant) => (
-                    <tr key={participant.traqId ?? participant.name}>
-                      <th scope="row">
-                        <div className="participant-summary">
-                          <Avatar
-                            iconUrl={resolveParticipantIconUrl(participant, poll.viewerTraqId, poll.viewerIconUrl)}
-                            name={participant.name}
-                            traqId={resolveTraqId(participant.name, participant.traqId ?? undefined)}
-                          />
-                          <div className="stack tight participant-summary__identity">
-                            <strong>{participant.name}</strong>
-                            {participant.traqId && participant.traqId !== participant.name ? (
-                              <span className="muted-text">@{participant.traqId}</span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </th>
-                      {sortedDates.map((date) => {
-                        const value = participant.responses[date] ?? "NO";
-                        return (
-                          <td className={`response-cell response-cell--${value.toLowerCase()}`} key={date}>
-                            <ResultStatusBadge value={value} />
-                          </td>
-                        );
-                      })}
-                    </tr>
+          <p className="scroll-hint">左右にスクロールして確認</p>
+          <div
+            className="results-table-wrap"
+            tabIndex={0}
+            role="region"
+            aria-label="参加者ごとの回答表"
+          >
+            <table className="response-matrix">
+              <caption className="visually-hidden">
+                参加者ごとの候補日時への回答
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">参加者</th>
+                  {candidates.map((candidate) => (
+                    <th
+                      key={candidate.candidateKey}
+                      scope="col"
+                      className={
+                        candidate.candidateKey === bestDay?.candidateKey
+                          ? "is-best-day"
+                          : ""
+                      }
+                    >
+                      <span>
+                        {candidate.candidateKey === bestDay?.candidateKey && (
+                          <Icon name="star" />
+                        )}
+                        {formatDateLabel(candidate.date)}
+                      </span>
+                      {candidate.startTime && (
+                        <small>{candidateTime(candidate)}</small>
+                      )}
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="empty-state">まだ回答はありません。</div>
-          )}
-          <div className="button-row">
-            <a className="secondary-button button-link" href={`/polls/${poll.id}`}>
-              回答に戻る
-            </a>
+                </tr>
+              </thead>
+              <tbody>
+                {poll.participants.map((participant) => (
+                  <tr key={participant.traqId ?? participant.name}>
+                    <th scope="row" title={participant.name}>
+                      <div className="participant-summary">
+                        <Avatar
+                          name={participant.name}
+                          iconUrl={resolveParticipantIconUrl(
+                            participant,
+                            poll.viewerTraqId,
+                            poll.viewerIconUrl,
+                          )}
+                          traqId={participant.traqId ?? undefined}
+                        />
+                        <span className="participant-summary__name">{participant.name}</span>
+                      </div>
+                    </th>
+                    {candidates.map((candidate) => (
+                      <td key={candidate.candidateKey}>
+                        <ResultStatusBadge
+                          value={
+                            participant.responses[candidate.candidateKey] ??
+                            "NO"
+                          }
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-
+          {!poll.participants.length && (
+            <p className="empty-state">まだ回答はありません。</p>
+          )}
+        </section>
         <section className="results-comments-layout">
           <CommentPanel
             viewerTraqId={poll.viewerTraqId}
             viewerIconUrl={poll.viewerIconUrl}
             note={commentDraft.body}
-            isEditingComment={isEditingComment}
-            ownComments={ownComments}
-            headerTitle="コメントを投稿"
+            isEditingComment={Boolean(commentDraft.editingCreatedAt)}
             onNoteInput={onNoteInput}
-            onEditComment={onEditComment}
             onCancelCommentEdit={onCancelCommentEdit}
-            onDeleteComment={onDeleteComment}
             isBusy={isCommentBusy}
             onSubmit={onSubmit}
-            missingTraqMessage="traQ IDの取得に失敗しました"
           />
-
-          <div className="dashboard-card stack">
-            <div className="section-head">
-              <h2>コメント {totalCommentCount}件</h2>
-            </div>
-            {commenters.length ? (
-              commenters.map((participant) => (
-                <article className="participant-card" key={`comment-${participant.traqId ?? participant.name}`}>
-                  <Avatar
-                    iconUrl={resolveParticipantIconUrl(participant, poll.viewerTraqId, poll.viewerIconUrl)}
-                    name={participant.name}
-                    traqId={resolveTraqId(participant.name, participant.traqId ?? undefined)}
-                  />
-                  <div className="stack tight">
-                    <strong>{participant.name}</strong>
-                    {participant.traqId && participant.traqId !== participant.name ? (
-                      <span className="muted-text">@{participant.traqId}</span>
-                    ) : null}
-                    <ParticipantComments participant={participant} />
-                  </div>
+          <section className="comments-list stack">
+            <h2>コメント {comments.length}件</h2>
+            {comments.length ? (
+              comments.map(({ participant, comment }, index) => (
+                <article
+                  className="comment-item"
+                  key={`${participant.name}-${comment.createdAt}-${index}`}
+                >
+                  <header className="comment-item__header">
+                    <Avatar
+                      name={participant.name}
+                      iconUrl={resolveParticipantIconUrl(
+                        participant,
+                        poll.viewerTraqId,
+                        poll.viewerIconUrl,
+                      )}
+                      traqId={participant.traqId ?? undefined}
+                    />
+                    <div>
+                      <strong>{participant.name}</strong>
+                      <time dateTime={comment.createdAt}>
+                        {formatCommentTimestamp(comment.createdAt)}
+                      </time>
+                    </div>
+                  </header>
+                  <p>{comment.body}</p>
+                  {isViewerParticipant(participant, poll) && (
+                    <div className="comment-actions">
+                      <button
+                        className="text-action"
+                        type="button"
+                        disabled={isCommentBusy}
+                        onClick={() =>
+                          onEditComment(comment.createdAt, comment.body)
+                        }
+                      >
+                        編集
+                        <Icon name="edit" />
+                      </button>
+                      <button
+                        className="text-action danger-button"
+                        type="button"
+                        disabled={isCommentBusy}
+                        onClick={() => setPendingDeletion(comment.createdAt)}
+                      >
+                        削除
+                        <Icon name="trash" />
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))
             ) : (
-              <div className="empty-state">まだコメントはありません。</div>
+              <p className="empty-state">まだコメントはありません。</p>
             )}
-          </div>
+          </section>
         </section>
-      </section>
+        <a className="secondary-button results-back" href={`/polls/${poll.id}`}>
+          <Icon name="left" />
+          回答画面へ戻る
+        </a>
+      </div>
+      <ConfirmDialog
+        open={pendingDeletion !== null}
+        title="コメントを削除しますか？"
+        confirmLabel="削除"
+        disabled={isCommentBusy}
+        onCancel={() => setPendingDeletion(null)}
+        onConfirm={() => {
+          if (pendingDeletion) onDeleteComment(pendingDeletion);
+          setPendingDeletion(null);
+        }}
+      />
     </>
   );
 }

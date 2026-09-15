@@ -1,3 +1,11 @@
+export type ScheduleType = "DATE_ONLY" | "TIMED";
+export type PollCandidate = {
+  candidateKey: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+};
+
 export type PollState = "DRAFT" | "OPEN" | "CLOSED";
 export type DayAvailability = "YES" | "MAYBE" | "NO";
 
@@ -17,7 +25,7 @@ export type ParticipantComment = {
   createdAt: string;
 };
 
-export type DaySummary = {
+export type DaySummary = PollCandidate & {
   date: string;
   label: string;
   yesCount: number;
@@ -38,6 +46,8 @@ export type PollDetail = {
   description: string;
   state: PollState;
   candidateDates: string[];
+  scheduleType: ScheduleType;
+  candidates: PollCandidate[];
   participantUrl: string;
   setupUrl?: string | null;
   viewerTraqId?: string | null;
@@ -51,6 +61,8 @@ export type PollListItem = {
   title: string;
   state: PollState;
   candidateDates: string[];
+  scheduleType: ScheduleType;
+  candidates: PollCandidate[];
   participantCount: number;
   respondedByViewer: boolean;
   createdByViewer: boolean;

@@ -22,16 +22,17 @@ private data class AppliedMigration(
 
 internal class DatabaseMigrator(
     private val database: IMySQL,
+    private val migrations: List<DatabaseMigration> = DATABASE_MIGRATIONS,
 ) {
     suspend fun migrate() {
-        validateMigrationDefinitions(DATABASE_MIGRATIONS)
+        validateMigrationDefinitions(migrations)
         database.transaction {
             acquireMigrationLock()
             try {
                 execute(CREATE_MIGRATION_HISTORY_TABLE).getOrThrow()
                 val appliedMigrations = readAppliedMigrations()
                 validateAppliedMigrations(appliedMigrations)
-                DATABASE_MIGRATIONS
+                migrations
                     .filterNot { it.version in appliedMigrations }
                     .forEach { migration ->
                         migration.statements.forEach { statement ->
@@ -80,7 +81,7 @@ internal class DatabaseMigrator(
             }
 
     private fun validateAppliedMigrations(appliedMigrations: Map<Int, AppliedMigration>) {
-        val definitionsByVersion = DATABASE_MIGRATIONS.associateBy(DatabaseMigration::version)
+        val definitionsByVersion = migrations.associateBy(DatabaseMigration::version)
         appliedMigrations.values.forEach { applied ->
             val definition =
                 definitionsByVersion[applied.version]
@@ -93,7 +94,7 @@ internal class DatabaseMigrator(
             }
         }
         val appliedVersions = appliedMigrations.keys.sorted()
-        val expectedVersions = DATABASE_MIGRATIONS.take(appliedVersions.size).map(DatabaseMigration::version)
+        val expectedVersions = migrations.take(appliedVersions.size).map(DatabaseMigration::version)
         check(appliedVersions == expectedVersions) {
             "Applied database migrations must be a contiguous prefix: $appliedVersions"
         }
@@ -271,5 +272,18 @@ internal val DATABASE_MIGRATIONS =
                     DROP COLUMN IF EXISTS setup_token
                     """.trimIndent(),
                 ),
+        ),
+        DatabaseMigration(
+            version = 4,
+            name = "add_timed_candidates",
+            statements = listOf(
+                "ALTER TABLE polls ADD COLUMN IF NOT EXISTS schedule_type VARCHAR(16) NOT NULL DEFAULT 'DATE_ONLY' AFTER state",
+                "RENAME TABLE IF EXISTS poll_candidate_dates TO poll_candidates",
+                "ALTER TABLE poll_candidates CHANGE COLUMN IF EXISTS candidate_date candidate_key VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL",
+                "ALTER TABLE poll_candidates ADD COLUMN IF NOT EXISTS date DATE NULL AFTER candidate_key, ADD COLUMN IF NOT EXISTS start_time TIME NULL AFTER date, ADD COLUMN IF NOT EXISTS end_time TIME NULL AFTER start_time",
+                "UPDATE poll_candidates SET date = STR_TO_DATE(candidate_key, '%Y-%m-%d') WHERE date IS NULL",
+                "ALTER TABLE poll_candidates MODIFY COLUMN date DATE NOT NULL",
+                "ALTER TABLE participant_responses CHANGE COLUMN IF EXISTS response_date candidate_key VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL",
+            ),
         ),
     )

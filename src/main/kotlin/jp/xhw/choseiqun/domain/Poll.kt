@@ -17,6 +17,18 @@ enum class DayAvailability {
     NO,
 }
 
+@Serializable
+enum class ScheduleType { DATE_ONLY, TIMED }
+
+data class PollCandidate(
+    val date: String,
+    val startTime: String? = null,
+    val endTime: String? = null,
+) {
+    val candidateKey: String
+        get() = if (startTime == null) date else "$date/$startTime-$endTime"
+}
+
 data class ViewerIdentity(
     val userId: String,
     val traqId: String,
@@ -42,7 +54,8 @@ data class PollRecord(
     val title: String,
     val description: String = "",
     val state: PollState = PollState.DRAFT,
-    val candidateDates: List<String> = emptyList(),
+    val scheduleType: ScheduleType = ScheduleType.DATE_ONLY,
+    val candidates: List<PollCandidate> = emptyList(),
     val createdAt: String,
     val updatedAt: String,
     val organizerUserId: String,
@@ -51,6 +64,8 @@ data class PollRecord(
     val announcementMessageId: Uuid? = null,
     val participants: List<ParticipantRecord> = emptyList(),
 ) {
+    val candidateDates: List<String> get() = candidates.map { it.date }.distinct()
+
     fun isOrganizer(viewerIdentity: ViewerIdentity): Boolean =
         organizerUserId == viewerIdentity.userId
 

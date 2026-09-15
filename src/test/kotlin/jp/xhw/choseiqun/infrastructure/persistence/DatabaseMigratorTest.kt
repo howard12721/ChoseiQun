@@ -9,12 +9,13 @@ class DatabaseMigratorTest {
     fun `migration versions are contiguous and checksums are stable in shape`() {
         validateMigrationDefinitions(DATABASE_MIGRATIONS)
 
-        assertEquals(listOf(1, 2, 3), DATABASE_MIGRATIONS.map(DatabaseMigration::version))
+        assertEquals(listOf(1, 2, 3, 4), DATABASE_MIGRATIONS.map(DatabaseMigration::version))
         assertEquals(
             mapOf(
                 1 to "f0afa2831fb0ff24",
                 2 to "66a9c47b963ce600",
                 3 to "ad4dc5177b9bd2ed",
+                4 to "2b0f74ba4d0a7348",
             ),
             DATABASE_MIGRATIONS.associate { migration -> migration.version to migration.checksum },
         )

@@ -4,6 +4,8 @@ import jp.xhw.choseiqun.application.ForbiddenException
 import jp.xhw.choseiqun.application.port.PollAnnouncementGateway
 import jp.xhw.choseiqun.application.port.PollListRecord
 import jp.xhw.choseiqun.application.port.PollRepository
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.ParticipantCommentRecord
 import jp.xhw.choseiqun.domain.ParticipantRecord
@@ -67,19 +69,8 @@ class PollService(
         require(description.length <= MAX_DESCRIPTION_LENGTH) {
             "説明は $MAX_DESCRIPTION_LENGTH 文字以内にしてください"
         }
-        require(command.candidateDates.size <= MAX_CANDIDATE_DATES) {
-            "候補日は $MAX_CANDIDATE_DATES 日以内にしてください"
-        }
-
-        val candidateDates =
-            command.candidateDates
-                .map(String::trim)
-                .filter(String::isNotBlank)
-                .map(summaryCalculator::parseDate)
-                .distinct()
-                .sorted()
-                .map { it.toString() }
-        require(candidateDates.isNotEmpty()) { "候補日を1日以上選んでください" }
+        val candidates = normalizeCandidates(command)
+        val candidateKeys = candidates.map { it.candidateKey }
 
         val updated =
             repository.save(
@@ -87,7 +78,11 @@ class PollService(
                     title = title,
                     description = description,
                     state = PollState.OPEN,
-                    candidateDates = candidateDates,
+                    scheduleType = command.scheduleType,
+                    candidates = candidates,
+                    participants = existing.participants.map {
+                        it.copy(responses = buildParticipantResponses(candidateKeys, it.responses))
+                    },
                     organizerTraqId = existing.organizerTraqId ?: viewer.traqId,
                     updatedAt = now(),
                 ),
@@ -107,6 +102,9 @@ class PollService(
     ): PollDetails {
         val poll = requireOpenPoll(id)
         val viewer = requireViewer(viewerIdentity)
+        require(command.responses.keys.all { key -> poll.candidates.any { it.candidateKey == key } }) {
+            "この調整に含まれない候補への回答があります"
+        }
         val timestamp = now()
         val existingParticipant = poll.participantFor(viewer)
         val updatedParticipant =
@@ -116,7 +114,7 @@ class PollService(
                 userId = viewer.userId,
                 note = existingParticipant?.note.orEmpty(),
                 comments = existingParticipant?.comments.orEmpty(),
-                responses = buildParticipantResponses(poll.candidateDates, command.responses),
+                responses = buildParticipantResponses(poll.candidates.map { it.candidateKey }, command.responses),
                 updatedAt = timestamp,
             )
         val updatedPoll =
@@ -157,7 +155,7 @@ class PollService(
                             body = commentBody,
                             createdAt = timestamp,
                         ),
-                responses = buildParticipantResponses(poll.candidateDates, existingParticipant?.responses.orEmpty()),
+                responses = buildParticipantResponses(poll.candidates.map { it.candidateKey }, existingParticipant?.responses.orEmpty()),
                 updatedAt = timestamp,
             )
         val updatedPoll =
@@ -202,7 +200,7 @@ class PollService(
                 userId = viewer.userId,
                 note = "",
                 comments = updatedComments,
-                responses = buildParticipantResponses(poll.candidateDates, existingParticipant.responses),
+                responses = buildParticipantResponses(poll.candidates.map { it.candidateKey }, existingParticipant.responses),
                 updatedAt = timestamp,
             )
         val updatedPoll =
@@ -238,7 +236,7 @@ class PollService(
                 userId = viewer.userId,
                 note = "",
                 comments = updatedComments,
-                responses = buildParticipantResponses(poll.candidateDates, existingParticipant.responses),
+                responses = buildParticipantResponses(poll.candidates.map { it.candidateKey }, existingParticipant.responses),
                 updatedAt = timestamp,
             )
         val updatedPoll =
@@ -295,10 +293,51 @@ class PollService(
             viewerIdentity = viewerIdentity,
         )
 
+    private fun normalizeCandidates(command: CompleteSetupCommand): List<PollCandidate> {
+        require(command.candidateDates.size <= MAX_CANDIDATE_DATES) { "候補日は90日以内にしてください" }
+        require(command.candidates.size <= 900) { "候補は900件以内にしてください" }
+        val selectedDates = command.candidateDates.map { normalizeDate(it) }.distinct().sorted()
+        val input = if (command.candidates.isEmpty() && command.scheduleType == ScheduleType.DATE_ONLY) {
+            selectedDates.map { PollCandidate(it) }
+        } else command.candidates
+        val candidates = input.map { candidate ->
+            val date = normalizeDate(candidate.date)
+            when (command.scheduleType) {
+                ScheduleType.DATE_ONLY -> {
+                    require(candidate.startTime == null && candidate.endTime == null) { "日付のみの候補には時刻を指定できません" }
+                    PollCandidate(date)
+                }
+                ScheduleType.TIMED -> {
+                    val start = normalizeTime(candidate.startTime)
+                    val end = normalizeTime(candidate.endTime)
+                    require(start != end) { "開始時刻と終了時刻は異なる時刻にしてください" }
+                    PollCandidate(date, start, end)
+                }
+            }
+        }.distinctBy { it.candidateKey }.sortedBy { it.candidateKey }
+        require(candidates.isNotEmpty()) { "候補日を1日以上選んでください" }
+        val dates = candidates.map { it.date }.distinct()
+        require(dates.size <= MAX_CANDIDATE_DATES) { "候補日は90日以内にしてください" }
+        require(selectedDates.isEmpty() || dates == selectedDates) { "未設定の日付があります！" }
+        return candidates
+    }
+
+    private fun normalizeDate(value: String): String {
+        val date = value.trim()
+        require(Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$").matches(date)) { "日付は YYYY-MM-DD 形式で入力してください" }
+        return summaryCalculator.parseDate(date).toString()
+    }
+
+    private fun normalizeTime(value: String?): String {
+        val time = value?.trim().orEmpty()
+        require(Regex("^([01][0-9]|2[0-3]):[0-5][0-9]$").matches(time)) { "時刻は HH:mm 形式で入力してください" }
+        return time
+    }
+
     private fun buildParticipantResponses(
-        candidateDates: List<String>,
+        candidateKeys: List<String>,
         responses: Map<String, DayAvailability>,
-    ): Map<String, DayAvailability> = candidateDates.associateWith { date -> responses[date] ?: DayAvailability.NO }
+    ): Map<String, DayAvailability> = candidateKeys.associateWith { key -> responses[key] ?: DayAvailability.NO }
 
     private fun requireViewer(viewerIdentity: ViewerIdentity?): ViewerIdentity =
         requireNotNull(viewerIdentity) {
