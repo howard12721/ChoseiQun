@@ -60,10 +60,6 @@ export function ResultsPage(props: {
               <Icon name="users" />
               参加者ごとの回答
             </h2>
-            <span className="best-legend">
-              <Icon name="star" />
-              最高評価
-            </span>
           </div>
           <p className="scroll-hint">左右にスクロールして確認</p>
           <div
