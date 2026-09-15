@@ -213,6 +213,8 @@ class PollHttpTest {
         val saved = repository.poll
         for (bad in listOf(
             valid.replace("19:00", "99:00"),
+            valid.replace("19:00", "17:59"),
+            valid.replace("19:00", "18:00"),
             valid.replace("TIMED", "unknown"),
             """{"title":"会議","scheduleType":"TIMED","candidates":[{"date":"2026-09-21","startTime":"18:00"}]}""",
         )) {

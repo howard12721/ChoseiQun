@@ -249,6 +249,8 @@ class PollServiceTest {
             PollCandidate("2026-09-21", "25:00", "26:00"),
             PollCandidate("2026-09-21", "18:00:00", "19:00"),
             PollCandidate("2026-09-21", "18:00", "18:00"),
+            PollCandidate("2026-09-21", "18:00", "17:59"),
+            PollCandidate("2026-09-21", "23:59", "00:00"),
             PollCandidate("2026-02-30", "18:00", "19:00"),
         )
         for (candidate in badCandidates) {

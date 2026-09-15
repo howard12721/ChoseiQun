@@ -310,7 +310,7 @@ class PollService(
                 ScheduleType.TIMED -> {
                     val start = normalizeTime(candidate.startTime)
                     val end = normalizeTime(candidate.endTime)
-                    require(start != end) { "開始時刻と終了時刻は異なる時刻にしてください" }
+                    require(start < end) { "終了時間は開始時間より後にしてください" }
                     PollCandidate(date, start, end)
                 }
             }

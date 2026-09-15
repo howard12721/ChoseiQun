@@ -8,6 +8,20 @@ export type SetupSelection = {
   timeRanges: Record<string, TimeRange[]>;
 };
 
+export function sortTimeRanges(ranges: TimeRange[]) {
+  return [...ranges].sort(
+    (a, b) =>
+      (a.startTime || "99:99").localeCompare(b.startTime || "99:99") ||
+      (a.endTime || "99:99").localeCompare(b.endTime || "99:99"),
+  );
+}
+
+export function invalidTimeOrder(range: TimeRange) {
+  return Boolean(
+    range.startTime && range.endTime && range.endTime <= range.startTime,
+  );
+}
+
 export function initialTimeRanges(poll: PollDetail) {
   const ranges: Record<string, TimeRange[]> = {};
   for (const candidate of poll.candidates ?? []) {
@@ -18,7 +32,12 @@ export function initialTimeRanges(poll: PollDetail) {
       });
     }
   }
-  return ranges;
+  return Object.fromEntries(
+    Object.entries(ranges).map(([date, dayRanges]) => [
+      date,
+      sortTimeRanges(dayRanges),
+    ]),
+  );
 }
 
 export function validTimeRange(range: TimeRange) {
@@ -26,7 +45,7 @@ export function validTimeRange(range: TimeRange) {
   return (
     time.test(range.startTime) &&
     time.test(range.endTime) &&
-    range.startTime !== range.endTime
+    range.startTime < range.endTime
   );
 }
 
@@ -41,12 +60,14 @@ export function missingTimes(selection: SetupSelection) {
 }
 
 export function commonTimeRanges(selection: SetupSelection): TimeRange[] | null {
-  const firstRanges = selection.timeRanges[selection.selectedDates[0]] ?? [];
+  const firstRanges = sortTimeRanges(
+    selection.timeRanges[selection.selectedDates[0]] ?? [],
+  );
   return selection.selectedDates.length > 0 &&
     firstRanges.length > 0 &&
     firstRanges.every(validTimeRange) &&
     selection.selectedDates.every((date) => {
-      const ranges = selection.timeRanges[date] ?? [];
+      const ranges = sortTimeRanges(selection.timeRanges[date] ?? []);
       return (
         ranges.length === firstRanges.length &&
         ranges.every(
@@ -93,12 +114,16 @@ export function setupCandidates(selection: SetupSelection) {
   }>((date) =>
     selection.scheduleType === "DATE_ONLY"
       ? [{ date, startTime: null, endTime: null }]
-      : (selection.timeRanges[date] ?? []).map((range) => ({ date, ...range })),
+      : sortTimeRanges(selection.timeRanges[date] ?? []).map((range) => ({
+          date,
+          ...range,
+        })),
   );
 }
 
 export function replaceTimeRanges(dates: string[], ranges: TimeRange[]) {
+  const sorted = sortTimeRanges(ranges);
   return Object.fromEntries(
-    dates.map((date) => [date, ranges.map((range) => ({ ...range }))]),
+    dates.map((date) => [date, sorted.map((range) => ({ ...range }))]),
   );
 }

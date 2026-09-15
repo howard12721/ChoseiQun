@@ -619,6 +619,12 @@ input::placeholder {
   flex-direction: column;
   gap: 8px;
 }
+.day-time-editor__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .time-range-editor {
   display: flex;
   flex-direction: column;
@@ -635,9 +641,13 @@ input::placeholder {
 }
 .time-range {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+.time-range > .time-error {
+  flex-basis: 100%;
 }
 .time-field-group {
   display: contents;
@@ -1027,11 +1037,16 @@ input::placeholder {
 .response-matrix th:first-child {
   width: 192px;
   min-width: 192px;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: white;
 }
 .response-matrix thead {
   background: var(--color-background-subtle);
 }
 .response-matrix thead th:first-child {
+  background: var(--color-background-subtle);
   border-radius: 20px 0 0 20px;
   font-size: 14px;
   color: var(--color-text-secondary);
@@ -1637,15 +1652,6 @@ input::placeholder {
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
-  }
-  .response-matrix tr > :first-child {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    background: white;
-  }
-  .response-matrix thead tr > :first-child {
-    background: var(--color-background-subtle);
   }
   .comment-form .button-row {
     flex-direction: column;

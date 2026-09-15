@@ -16,7 +16,7 @@ An event uses one schedule type: `DATE_ONLY` or `TIMED`. A candidate is a date w
 
 Every unanswered candidate defaults to `NO`, including newly added candidates for existing participants. A changed time is a new candidate; answers only carry over when the key is identical. Date-only events remain supported, and legacy events migrate to this type without changing their candidate keys or answers.
 
-Bulk time settings replace the ranges on every selected date. Duplicate ranges can remain in the editing draft and are deduplicated on publication. In timed mode every selected date must have complete ranges; the collapsed and expanded summaries show only `未設定の日付があります！` in red, and publication is disabled until complete. Earlier end times are accepted; there is no special overnight UI.
+Bulk time settings replace the ranges on every selected date. Duplicate ranges can remain in the editing draft and are deduplicated on publication. In timed mode every selected date must have complete ranges; missing ranges show `未設定の日付があります！` in red, and publication is disabled until complete. End times must be later than start times within the same day, enforced by the editor and API. Invalid ordering shows `終了時間は開始時間より後にしてください`. Ranges are ordered by start time, then end time; the editor sorts when focus leaves the range editor so rows stay still during input.
 
 With no selected dates, the time settings summary prompts the organizer to select dates. In timed mode, newly selected dates inherit the current common ranges when all selected dates have the same complete ranges. Each date receives its own editable copy, including when a previously removed date is selected again.
 

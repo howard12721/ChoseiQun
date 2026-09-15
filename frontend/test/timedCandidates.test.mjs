@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   commonTimeRanges,
   updateSelectedDates,
+  initialTimeRanges,
   missingTimes,
   setupCandidates,
   replaceTimeRanges,
@@ -87,6 +88,53 @@ test("bulk setting replaces every selected day and each day can then be changed 
   after[dates[0]][0].startTime = "17:00";
   assert.equal(after[dates[1]][0].startTime, "18:00");
   assert.equal(ranges[0].startTime, "18:00");
+});
+
+test("time ranges must end after their start within the same day", () => {
+  for (const range of [
+    { startTime: "18:00", endTime: "17:59" },
+    { startTime: "18:00", endTime: "18:00" },
+    { startTime: "23:59", endTime: "00:00" },
+  ]) {
+    assert.equal(validTimeRange(range), false);
+    const selection = {
+      scheduleType: "TIMED",
+      selectedDates: ["2026-09-21"],
+      timeRanges: { "2026-09-21": [range] },
+    };
+    assert.equal(missingTimes(selection), true);
+    assert.equal(commonTimeRanges(selection), null);
+  }
+  assert.equal(validTimeRange({ startTime: "00:00", endTime: "00:01" }), true);
+  assert.equal(validTimeRange({ startTime: "23:58", endTime: "23:59" }), true);
+});
+
+test("initial, bulk and published ranges are sorted while draft duplicates remain", () => {
+  const early = { startTime: "09:00", endTime: "10:00" };
+  const late = { startTime: "18:00", endTime: "19:00" };
+  const longer = { startTime: "09:00", endTime: "11:00" };
+  const ranges = [late, longer, early, early];
+  const date = "2026-09-21";
+  const expected = [early, early, longer, late];
+  assert.deepEqual(initialTimeRanges({
+    candidates: ranges.map(range => ({ date, ...range })),
+  })[date], expected);
+  assert.deepEqual(replaceTimeRanges([date], ranges)[date], expected);
+  assert.deepEqual(setupCandidates({
+    scheduleType: "TIMED",
+    selectedDates: [date],
+    timeRanges: { [date]: ranges },
+  }), expected.map(range => ({ date, ...range })));
+  assert.deepEqual(ranges, [late, longer, early, early]);
+});
+
+test("common ranges do not depend on draft input order", () => {
+  const early = { startTime: "09:00", endTime: "10:00" };
+  const late = { startTime: "18:00", endTime: "19:00" };
+  assert.deepEqual(commonTimeRanges({
+    selectedDates: ["2026-09-21", "2026-09-22"],
+    timeRanges: { "2026-09-21": [late, early], "2026-09-22": [early, late] },
+  }), [early, late]);
 });
 
 test("only complete ranges on selected dates can be common", () => {

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type Dispatch,
@@ -11,12 +12,16 @@ import { Icon } from "../../shared/ui/Icon";
 import { CandidateDateCalendar } from "./CandidateDateCalendar";
 import {
   commonTimeRanges,
+  invalidTimeOrder,
   missingTimes,
   replaceTimeRanges,
+  sortTimeRanges,
   validTimeRange,
   type SetupSelection,
   type TimeRange,
 } from "./model";
+
+const TIME_ORDER_ERROR = "終了時間は開始時間より後にしてください";
 
 export function SetupPage(props: {
   poll: PollDetail;
@@ -43,6 +48,9 @@ export function SetupPage(props: {
   ]);
   const isTimed = selection.scheduleType === "TIMED";
   const hasMissingTimes = missingTimes(selection);
+  const hasInvalidTimeOrder = selection.selectedDates.some((date) =>
+    (selection.timeRanges[date] ?? []).some(invalidTimeOrder),
+  );
   const firstRanges = selection.timeRanges[selection.selectedDates[0]] ?? [];
   const common = commonTimeRanges(selection);
 
@@ -162,7 +170,9 @@ export function SetupPage(props: {
                   <span className="time-summary">候補日を選択してください</span>
                 ) : hasMissingTimes ? (
                   <span className="time-error" role="status">
-                    未設定の日付があります！
+                    {hasInvalidTimeOrder
+                      ? TIME_ORDER_ERROR
+                      : "未設定の日付があります！"}
                   </span>
                 ) : (
                   <>
@@ -184,7 +194,24 @@ export function SetupPage(props: {
                   {selection.selectedDates.length ? (
                     selection.selectedDates.map((date) => (
                       <div className="day-time-editor" key={date}>
-                        <p>{formatDateLabel(date)}</p>
+                        <div className="day-time-editor__heading">
+                          <p>{formatDateLabel(date)}</p>
+                          <button
+                            className="text-action danger-button"
+                            type="button"
+                            aria-label={`${formatDateLabel(date)}を候補日から削除`}
+                            disabled={isSaving || !isTimed}
+                            onClick={() =>
+                              onSetDates(
+                                selection.selectedDates.filter(
+                                  (value) => value !== date,
+                                ),
+                              )
+                            }
+                          >
+                            日付を削除
+                          </button>
+                        </div>
                         <TimeRangeEditor
                           label={formatDateLabel(date)}
                           ranges={selection.timeRanges[date] ?? []}
@@ -261,6 +288,7 @@ function TimeRangeEditor({
   onChange: (ranges: TimeRange[]) => void;
   disabled?: boolean;
 }) {
+  const id = useId();
   function change(index: number, field: keyof TimeRange, value: string) {
     onChange(
       ranges.map((range, i) =>
@@ -269,7 +297,14 @@ function TimeRangeEditor({
     );
   }
   return (
-    <div className="time-range-editor">
+    <div
+      className="time-range-editor"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          onChange(sortTimeRanges(ranges));
+        }
+      }}
+    >
       {ranges.length > 0 && (
         <div className="time-labels" aria-hidden="true">
           <span>開始</span>
@@ -292,9 +327,23 @@ function TimeRangeEditor({
                   type="time"
                   lang="ja-JP"
                   step={60}
+                  min={
+                    field === "endTime" ? range.startTime || undefined : undefined
+                  }
                   aria-label={`${label} ${index + 1} ${field === "startTime" ? "開始" : "終了"}`}
+                  aria-invalid={field === "endTime" && invalidTimeOrder(range)}
+                  aria-describedby={
+                    invalidTimeOrder(range) ? `${id}-${index}-error` : undefined
+                  }
                   value={range[field]}
                   disabled={disabled}
+                  ref={(input) => {
+                    input?.setCustomValidity(
+                      field === "endTime" && invalidTimeOrder(range)
+                        ? TIME_ORDER_ERROR
+                        : "",
+                    );
+                  }}
                   onChange={(event) => change(index, field, event.target.value)}
                 />
                 <Icon name="down" />
@@ -310,6 +359,11 @@ function TimeRangeEditor({
           >
             <Icon name="close" />
           </button>
+          {invalidTimeOrder(range) && (
+            <p className="time-error" id={`${id}-${index}-error`} role="status">
+              {TIME_ORDER_ERROR}
+            </p>
+          )}
         </div>
       ))}
       <button
