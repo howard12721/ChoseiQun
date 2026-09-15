@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  commonTimeRanges,
+  updateSelectedDates,
   missingTimes,
   setupCandidates,
   replaceTimeRanges,
@@ -85,6 +87,72 @@ test("bulk setting replaces every selected day and each day can then be changed 
   after[dates[0]][0].startTime = "17:00";
   assert.equal(after[dates[1]][0].startTime, "18:00");
   assert.equal(ranges[0].startTime, "18:00");
+});
+
+test("only complete ranges on selected dates can be common", () => {
+  const selection = {
+    selectedDates: [],
+    scheduleType: "TIMED",
+    timeRanges: { "2026-09-21": [first] },
+  };
+  assert.equal(commonTimeRanges(selection), null);
+  selection.selectedDates = ["2026-09-21"];
+  assert.deepEqual(commonTimeRanges(selection), [first]);
+  for (const ranges of [[], [{ startTime: "18:00", endTime: "" }]]) {
+    selection.timeRanges["2026-09-21"] = ranges;
+    assert.equal(commonTimeRanges(selection), null);
+  }
+});
+
+test("added dates inherit every common range without sharing editable objects", () => {
+  const selection = {
+    selectedDates: ["2026-09-21", "2026-09-22"],
+    scheduleType: "TIMED",
+    timeRanges: replaceTimeRanges(["2026-09-21", "2026-09-22"], [first, second]),
+  };
+  const dates = [...selection.selectedDates, "2026-09-24", "2026-09-25"];
+  const next = updateSelectedDates(selection, dates);
+  assert.deepEqual(next.timeRanges["2026-09-24"], [first, second]);
+  assert.deepEqual(next.timeRanges["2026-09-25"], [first, second]);
+  assert.equal(missingTimes(next), false);
+  assert.equal(setupCandidates(next).length, 8);
+  assert.equal(selection.timeRanges["2026-09-24"], undefined);
+  next.timeRanges["2026-09-24"][0].startTime = "17:00";
+  assert.equal(next.timeRanges["2026-09-25"][0].startTime, "18:00");
+  assert.equal(selection.timeRanges["2026-09-21"][0].startTime, "18:00");
+});
+
+test("reselected dates use the current common ranges instead of stale ranges", () => {
+  const selection = {
+    selectedDates: ["2026-09-21", "2026-09-22"],
+    scheduleType: "TIMED",
+    timeRanges: { "2026-09-21": [first], "2026-09-22": [second] },
+  };
+  const removed = updateSelectedDates(selection, ["2026-09-21"]);
+  const reselected = updateSelectedDates(removed, selection.selectedDates);
+  assert.deepEqual(reselected.timeRanges["2026-09-22"], [first]);
+  assert.deepEqual(selection.timeRanges["2026-09-22"], [second]);
+  assert.equal(updateSelectedDates(reselected, [...reselected.selectedDates]), reselected);
+});
+
+test("custom, incomplete, empty and date-only selections do not supply common ranges", () => {
+  const base = {
+    selectedDates: ["2026-09-21", "2026-09-22"],
+    scheduleType: "TIMED",
+    timeRanges: { "2026-09-21": [first], "2026-09-22": [first] },
+  };
+  const selections = [
+    { ...base, timeRanges: { "2026-09-21": [first], "2026-09-22": [second] } },
+    { ...base, timeRanges: { "2026-09-21": [first] } },
+    { ...base, selectedDates: ["2026-09-21"], timeRanges: { "2026-09-21": [{ startTime: "18:00", endTime: "" }] } },
+    { ...base, selectedDates: [] },
+    { ...base, scheduleType: "DATE_ONLY" },
+  ];
+  for (const selection of selections) {
+    const next = updateSelectedDates(selection, [...selection.selectedDates, "2026-09-24"]);
+    assert.equal(next.timeRanges["2026-09-24"], undefined);
+    assert.deepEqual(next.timeRanges, selection.timeRanges);
+  }
 });
 
 test("calendar keeps multiple slots and date-only answers without orphan responses", () => {

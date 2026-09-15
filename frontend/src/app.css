@@ -376,24 +376,32 @@ input::placeholder {
   line-height: 22px;
 }
 .candidate-editor {
+  --candidate-gap: 48px;
+  --mode-transition: 280ms cubic-bezier(0.22, 1, 0.36, 1);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 48px;
+  gap: var(--candidate-gap);
   width: 100%;
-}
-.candidate-editor--date-only {
-  display: flex;
-  justify-content: center;
+  transition: row-gap var(--mode-transition);
 }
 .calendar-column {
+  position: relative;
+  left: 0;
+  width: 100%;
+  transform: translateX(0);
   display: flex;
   flex-direction: column;
   gap: 24px;
   min-width: 0;
+  transition:
+    left var(--mode-transition),
+    width var(--mode-transition),
+    transform var(--mode-transition);
 }
 .candidate-editor--date-only .calendar-column {
-  width: 552px;
-  max-width: 100%;
+  left: calc(100% + var(--candidate-gap) / 2);
+  width: min(552px, calc(200% + var(--candidate-gap)));
+  transform: translateX(-50%);
 }
 .calendar-controls {
   display: flex;
@@ -402,12 +410,29 @@ input::placeholder {
   gap: 16px;
 }
 .schedule-mode {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   background: var(--color-background-subtle);
   border-radius: 24px;
   flex: none;
 }
+.schedule-mode::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  border-radius: inherit;
+  background: var(--color-background-selected);
+  pointer-events: none;
+  transform: translateX(0);
+  transition: transform var(--mode-transition);
+}
+.schedule-mode:has(button:last-child[aria-pressed="true"])::before {
+  transform: translateX(100%);
+}
 .schedule-mode button {
+  position: relative;
   height: 48px;
   padding: 0 20px;
   display: flex;
@@ -425,9 +450,6 @@ input::placeholder {
 .schedule-mode button .icon {
   width: 16px;
   height: 16px;
-}
-.schedule-mode button.is-selected {
-  background: var(--color-background-selected);
 }
 .month-card {
   width: 100%;
@@ -510,6 +532,31 @@ input::placeholder {
 }
 .time-column {
   min-width: 0;
+  align-self: start;
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    grid-template-rows var(--mode-transition),
+    opacity var(--mode-transition),
+    transform var(--mode-transition),
+    visibility 0s;
+}
+.time-column__content {
+  min-height: 0;
+  overflow: hidden;
+}
+.time-column:focus-within .time-column__content {
+  overflow: visible;
+}
+.candidate-editor--date-only .time-column {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(8px);
+  visibility: hidden;
+  transition-delay: 0s, 0s, 0s, 280ms;
 }
 .time-accordion {
   border: 1px solid var(--color-border-strong);
@@ -1131,6 +1178,11 @@ input::placeholder {
 .results-back {
   width: 240px;
 }
+.results-back .icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.65;
+}
 .confirm-dialog {
   border: 1px solid var(--color-border-strong);
   border-radius: 20px;
@@ -1332,7 +1384,7 @@ input::placeholder {
     padding-inline: 32px;
   }
   .candidate-editor {
-    gap: 24px;
+    --candidate-gap: 24px;
   }
   .calendar-controls {
     flex-direction: column;
@@ -1397,12 +1449,17 @@ input::placeholder {
     gap: 32px;
   }
   .candidate-editor {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
+    --candidate-gap: 32px;
+    grid-template-columns: minmax(0, 1fr);
   }
+  .candidate-editor--date-only {
+    row-gap: 0;
+  }
+  .calendar-column,
   .candidate-editor--date-only .calendar-column {
+    left: 0;
     width: 100%;
+    transform: none;
   }
   .calendar-controls {
     flex-direction: column;
@@ -1413,7 +1470,6 @@ input::placeholder {
     width: 100%;
   }
   .schedule-mode button {
-    flex: 1;
     padding: 0 12px;
   }
   .day-cell {

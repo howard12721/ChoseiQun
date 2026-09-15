@@ -134,7 +134,9 @@ export function AnswerCalendarPage({
                 className="agenda-slot"
                 key={`${entry.pollId}-${entry.candidateKey}`}
               >
-                <h3>{candidateTime(entry)}</h3>
+                {entry.startTime && entry.endTime && (
+                  <h3>{candidateTime(entry)}</h3>
+                )}
                 <strong>{entry.title}</strong>
                 <div className="agenda-slot__actions">
                   <span

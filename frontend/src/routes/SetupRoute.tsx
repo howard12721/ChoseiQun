@@ -6,6 +6,7 @@ import {
   initialTimeRanges,
   missingTimes,
   setupCandidates,
+  updateSelectedDates,
   type SetupSelection,
 } from "../features/poll-setup/model";
 import { SetupPage } from "../features/poll-setup/SetupPage";
@@ -49,18 +50,7 @@ export function SetupRoute({ pollId }: { pollId: string }) {
   }, [resource.data]);
 
   function setDates(dates: string[]) {
-    setSelection((current) => {
-      const selectedDates = sortDates(dates);
-      if (
-        current.selectedDates.length === selectedDates.length &&
-        current.selectedDates.every(
-          (value, index) => value === selectedDates[index],
-        )
-      ) {
-        return current;
-      }
-      return { ...current, selectedDates };
-    });
+    setSelection((current) => updateSelectedDates(current, sortDates(dates)));
   }
 
   async function submit(formData: FormData) {

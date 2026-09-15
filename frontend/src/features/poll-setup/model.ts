@@ -40,6 +40,51 @@ export function missingTimes(selection: SetupSelection) {
   );
 }
 
+export function commonTimeRanges(selection: SetupSelection): TimeRange[] | null {
+  const firstRanges = selection.timeRanges[selection.selectedDates[0]] ?? [];
+  return selection.selectedDates.length > 0 &&
+    firstRanges.length > 0 &&
+    firstRanges.every(validTimeRange) &&
+    selection.selectedDates.every((date) => {
+      const ranges = selection.timeRanges[date] ?? [];
+      return (
+        ranges.length === firstRanges.length &&
+        ranges.every(
+          (range, index) =>
+            range.startTime === firstRanges[index].startTime &&
+            range.endTime === firstRanges[index].endTime,
+        )
+      );
+    })
+    ? firstRanges
+    : null;
+}
+
+export function updateSelectedDates(
+  current: SetupSelection,
+  selectedDates: string[],
+): SetupSelection {
+  if (
+    current.selectedDates.length === selectedDates.length &&
+    current.selectedDates.every((date, index) => date === selectedDates[index])
+  ) {
+    return current;
+  }
+  const common =
+    current.scheduleType === "TIMED" ? commonTimeRanges(current) : null;
+  const addedDates = selectedDates.filter(
+    (date) => !current.selectedDates.includes(date),
+  );
+  return {
+    ...current,
+    selectedDates,
+    timeRanges:
+      common && addedDates.length
+        ? { ...current.timeRanges, ...replaceTimeRanges(addedDates, common) }
+        : current.timeRanges,
+  };
+}
+
 export function setupCandidates(selection: SetupSelection) {
   return selection.selectedDates.flatMap<{
     date: string;

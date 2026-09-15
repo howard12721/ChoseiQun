@@ -10,6 +10,7 @@ import { formatDateLabel } from "../../shared/lib/date";
 import { Icon } from "../../shared/ui/Icon";
 import { CandidateDateCalendar } from "./CandidateDateCalendar";
 import {
+  commonTimeRanges,
   missingTimes,
   replaceTimeRanges,
   validTimeRange,
@@ -40,16 +41,10 @@ export function SetupPage(props: {
   const [bulkRanges, setBulkRanges] = useState<TimeRange[]>([
     { startTime: "18:00", endTime: "19:00" },
   ]);
+  const isTimed = selection.scheduleType === "TIMED";
   const hasMissingTimes = missingTimes(selection);
   const firstRanges = selection.timeRanges[selection.selectedDates[0]] ?? [];
-  const common =
-    selection.selectedDates.length > 0 &&
-    firstRanges.length > 0 &&
-    selection.selectedDates.every(
-      (date) =>
-        JSON.stringify(selection.timeRanges[date]) ===
-        JSON.stringify(firstRanges),
-    );
+  const common = commonTimeRanges(selection);
 
   function updateRanges(date: string, ranges: TimeRange[]) {
     onChangeSelection((current) => ({
@@ -91,7 +86,7 @@ export function SetupPage(props: {
         </label>
       </div>
       <div
-        className={`candidate-editor${selection.scheduleType === "DATE_ONLY" ? " candidate-editor--date-only" : ""}`}
+        className={`candidate-editor${isTimed ? "" : " candidate-editor--date-only"}`}
       >
         <section className="calendar-column">
           <div className="calendar-controls">
@@ -111,9 +106,6 @@ export function SetupPage(props: {
                   type="button"
                   key={mode}
                   aria-pressed={selection.scheduleType === mode}
-                  className={
-                    selection.scheduleType === mode ? "is-selected" : ""
-                  }
                   disabled={isSaving}
                   onClick={() =>
                     onChangeSelection((current) => ({
@@ -143,8 +135,12 @@ export function SetupPage(props: {
             </p>
           </div>
         </section>
-        {selection.scheduleType === "TIMED" && (
-          <div className="time-column">
+        <div
+          className="time-column"
+          aria-hidden={!isTimed}
+          inert={!isTimed}
+        >
+          <div className="time-column__content">
             <section className="time-accordion">
               <button
                 className="time-toggle"
@@ -162,7 +158,9 @@ export function SetupPage(props: {
                     <Icon name="down" />
                   </span>
                 </span>
-                {hasMissingTimes ? (
+                {!selection.selectedDates.length ? (
+                  <span className="time-summary">候補日を選択してください</span>
+                ) : hasMissingTimes ? (
                   <span className="time-error" role="status">
                     未設定の日付があります！
                   </span>
@@ -173,7 +171,7 @@ export function SetupPage(props: {
                     </span>
                     {common && (
                       <span className="time-summary">
-                        {firstRanges
+                        {common
                           .map((range) => `${range.startTime}–${range.endTime}`)
                           .join(" / ")}
                       </span>
@@ -191,7 +189,7 @@ export function SetupPage(props: {
                           label={formatDateLabel(date)}
                           ranges={selection.timeRanges[date] ?? []}
                           onChange={(ranges) => updateRanges(date, ranges)}
-                          disabled={isSaving}
+                          disabled={isSaving || !isTimed}
                         />
                       </div>
                     ))
@@ -218,7 +216,7 @@ export function SetupPage(props: {
               まとめて設定
             </button>
           </div>
-        )}
+        </div>
       </div>
       <div className="publish-actions">
         <button

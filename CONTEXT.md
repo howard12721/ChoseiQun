@@ -18,4 +18,6 @@ Every unanswered candidate defaults to `NO`, including newly added candidates fo
 
 Bulk time settings replace the ranges on every selected date. Duplicate ranges can remain in the editing draft and are deduplicated on publication. In timed mode every selected date must have complete ranges; the collapsed and expanded summaries show only `未設定の日付があります！` in red, and publication is disabled until complete. Earlier end times are accepted; there is no special overnight UI.
 
+With no selected dates, the time settings summary prompts the organizer to select dates. In timed mode, newly selected dates inherit the current common ranges when all selected dates have the same complete ranges. Each date receives its own editable copy, including when a previously removed date is selected again.
+
 The approved UI is [ChoseiQun — White & Sky](https://www.figma.com/design/WUp3NLJARiXKUzyn5Rgsdb), including the date-only calendar and missing-time states. The CSS tokens, fonts and SVGs come from that file. Migration and API details are in [docs/timed-events.md](docs/timed-events.md).
