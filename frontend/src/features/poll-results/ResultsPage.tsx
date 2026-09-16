@@ -61,7 +61,6 @@ export function ResultsPage(props: {
               参加者ごとの回答
             </h2>
           </div>
-          <p className="scroll-hint">左右にスクロールして確認</p>
           <div
             className="results-table-wrap"
             tabIndex={0}

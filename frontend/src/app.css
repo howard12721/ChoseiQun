@@ -593,6 +593,7 @@ input::placeholder {
   align-items: center;
   margin-left: auto;
   color: var(--color-text-action);
+  transition: transform var(--mode-transition);
 }
 .disclosure .icon {
   width: 16px;
@@ -611,6 +612,28 @@ input::placeholder {
 }
 .time-error {
   color: var(--color-status-no-foreground);
+}
+.daily-time-editors {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--mode-transition),
+    opacity var(--mode-transition);
+}
+.daily-time-editors[aria-hidden="false"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.daily-time-editors__content {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (min-width: 701px) {
+  .daily-time-editors__content {
+    max-height: min(420px, 50dvh);
+    overflow-y: auto;
+  }
 }
 .day-time-editor {
   padding: 16px;
@@ -897,9 +920,6 @@ input::placeholder {
 .shell-content:has(.home-stack) {
   padding: 40px 128px 48px;
 }
-.app-shell:has(.home-stack) .shell-header {
-  padding-inline: 128px;
-}
 .home-stack {
   display: flex;
   flex-direction: column;
@@ -998,17 +1018,16 @@ input::placeholder {
   flex-direction: column;
   gap: 40px;
 }
-.scroll-hint {
-  display: none;
-}
 .results-table-wrap {
   overflow-x: auto;
+  overscroll-behavior-x: none;
   width: 100%;
 }
 .response-matrix {
   border-collapse: separate;
   border-spacing: 0;
-  width: 100%;
+  /* Let the fixed column widths determine the table width. */
+  width: 0;
   table-layout: fixed;
 }
 .response-matrix th {
@@ -1016,13 +1035,14 @@ input::placeholder {
   font-size: 16px;
   line-height: 26px;
   font-weight: 400;
-  min-width: 160px;
-  width: 160px;
-  padding: 12px;
+  min-width: 104px;
+  width: 104px;
+  padding: 12px 8px;
 }
 .response-matrix th:first-child {
   width: 192px;
   min-width: 192px;
+  padding: 12px;
   position: sticky;
   left: 0;
   z-index: 1;
@@ -1380,8 +1400,7 @@ input::placeholder {
   .shell-content:has(.home-stack) {
     padding-inline: 32px;
   }
-  .shell-header,
-  .app-shell:has(.home-stack) .shell-header {
+  .shell-header {
     padding-inline: 32px;
   }
   .candidate-editor {
@@ -1400,8 +1419,7 @@ input::placeholder {
   }
 }
 @media (max-width: 700px) {
-  .shell-header,
-  .app-shell:has(.home-stack) .shell-header {
+  .shell-header {
     height: 72px;
     padding: 16px 24px;
     gap: 12px;
@@ -1611,16 +1629,6 @@ input::placeholder {
   .results-matrix-section {
     gap: 16px;
   }
-  .scroll-hint {
-    display: block;
-    color: var(--color-text-secondary);
-    font-size: 14px;
-    line-height: 22px;
-  }
-  .response-matrix th {
-    width: 128px;
-    min-width: 128px;
-  }
   .response-matrix th:first-child {
     width: 72px;
     min-width: 72px;
@@ -1701,8 +1709,7 @@ input::placeholder {
 @media (max-width: 359px) {
   .shell-header,
   .shell-content,
-  .shell-content:has(.home-stack),
-  .app-shell:has(.home-stack) .shell-header {
+  .shell-content:has(.home-stack) {
     padding-left: 16px;
     padding-right: 16px;
   }

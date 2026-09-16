@@ -189,8 +189,13 @@ export function SetupPage(props: {
                   </>
                 )}
               </button>
-              {expanded && (
-                <div id="daily-time-editors">
+              <div
+                id="daily-time-editors"
+                className="daily-time-editors"
+                aria-hidden={!expanded}
+                inert={!expanded}
+              >
+                <div className="daily-time-editors__content">
                   {selection.selectedDates.length ? (
                     selection.selectedDates.map((date) => (
                       <div className="day-time-editor" key={date}>
@@ -216,7 +221,7 @@ export function SetupPage(props: {
                           label={formatDateLabel(date)}
                           ranges={selection.timeRanges[date] ?? []}
                           onChange={(ranges) => updateRanges(date, ranges)}
-                          disabled={isSaving || !isTimed}
+                          disabled={isSaving || !isTimed || !expanded}
                         />
                       </div>
                     ))
@@ -224,7 +229,7 @@ export function SetupPage(props: {
                     <p className="empty-state">候補日を選択してください</p>
                   )}
                 </div>
-              )}
+              </div>
             </section>
             <button
               className="primary-button bulk-trigger"
