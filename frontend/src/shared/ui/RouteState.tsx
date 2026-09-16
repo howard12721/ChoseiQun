@@ -1,6 +1,18 @@
+import { useEffect, useState } from "react";
 import { Hero } from "./Shell";
 
 export function LoadingRoute() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(true), 500);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (!visible) {
+    return null;
+  }
+
   return <Hero title="読み込み中" body="調整データを取得しています。" loading />;
 }
 
