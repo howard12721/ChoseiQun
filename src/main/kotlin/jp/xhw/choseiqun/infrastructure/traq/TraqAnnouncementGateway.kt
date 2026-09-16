@@ -49,11 +49,11 @@ object TraqAnnouncementFormatter {
             lines += "設定URL: ${baseUrl.trimEnd('/')}/setup/${poll.id}"
             return lines.joinToString("\n")
         }
-        lines += "参加者向けリンク: $participantUrl"
+        lines += "## [>> 回答する <<]($participantUrl)"
         lines += "回答者: ${poll.participants.map { it.traqId }.joinToString("") { ":@$it:" }}"
         if (poll.candidateDates.isNotEmpty()) {
             lines += ""
-            lines += "日ごとの回答:"
+            lines += "候補ごとの回答:"
             poll.candidates.forEach { candidate ->
                 val date = candidate.candidateKey
                 val label = formatDateLabel(LocalDate.parse(candidate.date)) +
