@@ -79,20 +79,11 @@ export function PollRoute({ pollId }: { pollId: string }) {
       return;
     }
 
-    const isInitialResponse = !poll.participants.some((participant) =>
-      isViewerParticipant(participant, poll),
-    );
     setSaving(true);
     try {
-      const nextPoll = await saveAvailability(poll.id, draft.responses);
-      if (isInitialResponse) {
-        allowSavedNavigationRef.current = true;
-        window.location.assign(`/polls/${poll.id}/results`);
-        return;
-      }
-      resource.replace(nextPoll);
-      setDraft({ responses: viewerResponses(nextPoll, draft.responses) });
-      showFlash("回答を保存しました", "success");
+      await saveAvailability(poll.id, draft.responses);
+      allowSavedNavigationRef.current = true;
+      window.location.assign(`/polls/${poll.id}/results`);
     } finally {
       setSaving(false);
     }
