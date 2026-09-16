@@ -13,6 +13,8 @@ import jp.xhw.choseiqun.application.poll.PollService
 import jp.xhw.choseiqun.application.port.IdentityDirectory
 import jp.xhw.choseiqun.application.port.PollListRecord
 import jp.xhw.choseiqun.application.port.PollRepository
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.PollRecord
 import jp.xhw.choseiqun.domain.PollState
 import jp.xhw.choseiqun.domain.ViewerIdentity
@@ -193,6 +195,46 @@ class PollHttpTest {
             assertFalse(body.contains("secret"))
         }
 
+    @Test
+    fun `timed setup API normalizes duplicates and rejects malformed candidates`() = testApplication {
+        val repository = HttpTestPollRepository(openPoll())
+        application {
+            configureHttp(PollService(repository), identityDirectory(), PollHttpPresenter("https://chosei.example", "https://q.example"), "https://chosei.example")
+        }
+        val valid = """{"title":"会議","scheduleType":"TIMED","candidateDates":["2026-09-21"],"candidates":[{"date":"2026-09-21","startTime":"18:00","endTime":"19:00"},{"date":"2026-09-21","startTime":"18:00","endTime":"19:00"}]}"""
+        val response = client.post("/api/setup/poll1234") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            header("X-Forwarded-User", viewer.traqId)
+            setBody(valid)
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(1, repository.poll.candidates.size)
+        assertContains(response.bodyAsText(), "\"candidateKey\":\"2026-09-21/18:00-19:00\"")
+        val saved = repository.poll
+        for (bad in listOf(
+            valid.replace("19:00", "99:00"),
+            valid.replace("19:00", "17:59"),
+            valid.replace("19:00", "18:00"),
+            valid.replace("TIMED", "unknown"),
+            """{"title":"会議","scheduleType":"TIMED","candidates":[{"date":"2026-09-21","startTime":"18:00"}]}""",
+        )) {
+            val rejected = client.post("/api/setup/poll1234") {
+                header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                header("X-Forwarded-User", viewer.traqId)
+                setBody(bad)
+            }
+            assertEquals(HttpStatusCode.BadRequest, rejected.status)
+            assertEquals(saved, repository.poll)
+        }
+        val defaults = client.post("/api/polls/poll1234/availability") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+            header("X-Forwarded-User", viewer.traqId)
+            setBody("""{"responses":{}}""")
+        }
+        assertEquals(HttpStatusCode.OK, defaults.status)
+        assertContains(defaults.bodyAsText(), "\"2026-09-21/18:00-19:00\":\"NO\"")
+    }
+
     private fun identityDirectory(): IdentityDirectory =
         object : IdentityDirectory {
             override suspend fun resolveByTraqId(forwardedTraqId: String?): ViewerIdentity? =
@@ -207,7 +249,7 @@ class PollHttpTest {
             id = "poll1234",
             title = "会議日程",
             state = PollState.OPEN,
-            candidateDates = listOf("2026-07-20"),
+            candidates = listOf("2026-07-20").map { PollCandidate(it) },
             createdAt = "2026-07-01T00:00:00Z",
             updatedAt = "2026-07-01T00:00:00Z",
             organizerUserId = viewer.userId,

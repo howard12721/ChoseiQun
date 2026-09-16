@@ -1,68 +1,76 @@
 import { AvailabilityIcon } from "../../entities/poll/AvailabilityIcon";
-import { availabilityButtonClass, availabilityLabel } from "../../entities/poll/availabilityUi";
-import type { DayAvailability } from "../../entities/poll/model";
-import { formatDateLabel, sortDates } from "../../shared/lib/date";
+import {
+  availabilityButtonClass,
+  availabilityLabel,
+} from "../../entities/poll/availabilityUi";
+import type { DayAvailability, PollCandidate } from "../../entities/poll/model";
+import { candidateTime, groupCandidates } from "../../entities/poll/selectors";
+import { formatDateLabel } from "../../shared/lib/date";
 
-export function AvailabilityTable(props: {
-  dates: string[];
+export function AvailabilityTable({
+  candidates,
+  responses,
+  disabled = false,
+  onPickAvailability,
+}: {
+  candidates: PollCandidate[];
   responses: Record<string, DayAvailability>;
   disabled?: boolean;
-  onPickAvailability: (date: string, value: DayAvailability) => void;
+  onPickAvailability: (key: string, value: DayAvailability) => void;
 }) {
-  const { dates, responses, disabled = false, onPickAvailability } = props;
-  const sortedDates = sortDates(dates);
-
-  if (!sortedDates.length) {
-    return <div className="empty-state">候補日がありません。</div>;
-  }
-
+  const timed = candidates.some((candidate) => candidate.startTime !== null);
   return (
-    <div className="availability-table-wrap">
-      <table className="availability-table">
-        <caption className="visually-hidden">候補日ごとの参加可否を選択</caption>
-        <thead>
-          <tr>
-            <th scope="col">日付</th>
-            <th scope="col">あなたの予定</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedDates.map((date) => {
-            const response = responses[date];
-            return (
-              <tr key={date}>
-                <th scope="row">
-                  <div className="availability-date">{formatDateLabel(date)}</div>
-                  <div className="availability-date-subtle">{date}</div>
-                </th>
-                <td>
-                  <fieldset className="availability-actions">
-                    <legend className="visually-hidden">{formatDateLabel(date)}の予定</legend>
-                    {([
-                      ["YES", "参加可"],
-                      ["MAYBE", "たぶん"],
-                      ["NO", "不可"],
-                    ] as const).map(([tool, label]) => (
-                      <button
-                        key={tool}
-                        type="button"
-                        className={availabilityButtonClass(tool, response)}
-                        disabled={disabled}
-                        aria-label={`${formatDateLabel(date)}: ${availabilityLabel(tool)}`}
-                        aria-pressed={(response ?? "NO") === tool}
-                        onClick={() => onPickAvailability(date, tool)}
-                      >
-                        <AvailabilityIcon value={tool} />
-                        <span>{label}</span>
-                      </button>
-                    ))}
-                  </fieldset>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div
+      className={`availability-table${timed ? " availability-table--timed" : " availability-table--date"}`}
+    >
+      {groupCandidates(candidates).map(([date, dayCandidates]) => (
+        <section className="availability-day" key={date}>
+          {timed && (
+            <h3 className="candidate-day-heading">{formatDateLabel(date)}</h3>
+          )}
+          {dayCandidates.map((candidate) => (
+            <div className="availability-row" key={candidate.candidateKey}>
+              <div
+                className={`availability-date${timed ? "" : " candidate-day-heading"}`}
+              >
+                {timed ? candidateTime(candidate) : formatDateLabel(date)}
+              </div>
+              <fieldset className="availability-actions" disabled={disabled}>
+                <legend className="visually-hidden">
+                  {formatDateLabel(date)}{" "}
+                  {timed ? candidateTime(candidate) : ""}の予定
+                </legend>
+                {(
+                  [
+                    ["YES", "参加可"],
+                    ["MAYBE", "たぶん"],
+                    ["NO", "不可"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={availabilityButtonClass(
+                      value,
+                      responses[candidate.candidateKey],
+                    )}
+                    aria-label={`${formatDateLabel(date)} ${timed ? candidateTime(candidate) : ""}: ${availabilityLabel(value)}`}
+                    aria-pressed={
+                      (responses[candidate.candidateKey] ?? "NO") === value
+                    }
+                    onClick={() =>
+                      onPickAvailability(candidate.candidateKey, value)
+                    }
+                  >
+                    <AvailabilityIcon value={value} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </fieldset>
+            </div>
+          ))}
+        </section>
+      ))}
     </div>
   );
 }

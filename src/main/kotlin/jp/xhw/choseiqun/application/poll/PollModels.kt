@@ -1,5 +1,7 @@
 package jp.xhw.choseiqun.application.poll
 
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.PollRecord
 import jp.xhw.choseiqun.domain.ViewerIdentity
@@ -16,6 +18,8 @@ data class CompleteSetupCommand(
     val title: String,
     val description: String = "",
     val candidateDates: List<String> = emptyList(),
+    val scheduleType: ScheduleType = ScheduleType.DATE_ONLY,
+    val candidates: List<PollCandidate> = emptyList(),
 )
 
 data class UpsertAvailabilityCommand(
@@ -37,6 +41,9 @@ data class DeleteCommentCommand(
 
 data class DaySummary(
     val date: String,
+    val candidateKey: String = date,
+    val startTime: String? = null,
+    val endTime: String? = null,
     val yesCount: Int,
     val maybeCount: Int,
     val noCount: Int,

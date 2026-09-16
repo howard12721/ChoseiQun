@@ -54,8 +54,10 @@ object TraqAnnouncementFormatter {
         if (poll.candidateDates.isNotEmpty()) {
             lines += ""
             lines += "日ごとの回答:"
-            poll.candidateDates.forEach { date ->
-                val label = formatDateLabel(LocalDate.parse(date))
+            poll.candidates.forEach { candidate ->
+                val date = candidate.candidateKey
+                val label = formatDateLabel(LocalDate.parse(candidate.date)) +
+                    (candidate.startTime?.let { " $it–${candidate.endTime}" } ?: "")
                 val yesParticipants = poll.participants.filterByAvailability(date, DayAvailability.YES)
                 val maybeParticipants = poll.participants.filterByAvailability(date, DayAvailability.MAYBE)
                 lines += "$label: ${formatAvailabilityLine(yesParticipants, maybeParticipants)}"

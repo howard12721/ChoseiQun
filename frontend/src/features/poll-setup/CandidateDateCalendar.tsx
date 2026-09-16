@@ -1,3 +1,4 @@
+import { Icon } from "../../shared/ui/Icon";
 import { useEffect, useRef } from "react";
 import {
   buildDateRange,
@@ -22,7 +23,10 @@ export function CandidateDateCalendar(props: {
   onSetDates: (dates: string[]) => void;
 }) {
   const { monthDate, selectedDates, onShiftMonth, onSetDates } = props;
-  const monthLabel = new Intl.DateTimeFormat("ja-JP", { year: "numeric", month: "long" }).format(monthDate);
+  const monthLabel = new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "long",
+  }).format(monthDate);
   const cells = buildMonthCells(monthDate);
   const dragStateRef = useRef<CalendarPaintState | null>(null);
   const onSetDatesRef = useRef(onSetDates);
@@ -60,7 +64,10 @@ export function CandidateDateCalendar(props: {
     date: string,
   ) {
     onSetDatesRef.current(
-      applyCalendarPaintSelection(dragState, buildDateRange(dragState.anchorDate, date)),
+      applyCalendarPaintSelection(
+        dragState,
+        buildDateRange(dragState.anchorDate, date),
+      ),
     );
   }
 
@@ -75,7 +82,10 @@ export function CandidateDateCalendar(props: {
     }
   }
 
-  function startPaint(date: string, event: React.PointerEvent<HTMLButtonElement>) {
+  function startPaint(
+    date: string,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) {
     if (!event.isPrimary || event.button !== 0) {
       return;
     }
@@ -91,7 +101,11 @@ export function CandidateDateCalendar(props: {
     }
   }
 
-  function findSetupDateAtPoint(container: HTMLElement, clientX: number, clientY: number) {
+  function findSetupDateAtPoint(
+    container: HTMLElement,
+    clientX: number,
+    clientY: number,
+  ) {
     const target = container.ownerDocument
       .elementFromPoint(clientX, clientY)
       ?.closest<HTMLElement>("[data-setup-date]");
@@ -107,7 +121,7 @@ export function CandidateDateCalendar(props: {
           aria-label="前の月"
           onClick={() => onShiftMonth(-1)}
         >
-          <ChevronIcon direction="left" />
+          <Icon name="left" />
         </button>
         <div className="month-card__title">
           <h3 aria-live="polite">{monthLabel}</h3>
@@ -118,12 +132,17 @@ export function CandidateDateCalendar(props: {
           aria-label="次の月"
           onClick={() => onShiftMonth(1)}
         >
-          <ChevronIcon direction="right" />
+          <Icon name="right" />
         </button>
       </div>
       <div className="weekday-row">
         {WEEKDAYS.map((day, index) => (
-          <span className={index === 0 ? "is-sunday" : index === 6 ? "is-saturday" : ""} key={day}>
+          <span
+            className={
+              index === 0 ? "is-sunday" : index === 6 ? "is-saturday" : ""
+            }
+            key={day}
+          >
             {day}
           </span>
         ))}
@@ -134,7 +153,11 @@ export function CandidateDateCalendar(props: {
           if (!event.isPrimary) {
             return;
           }
-          const date = findSetupDateAtPoint(event.currentTarget, event.clientX, event.clientY);
+          const date = findSetupDateAtPoint(
+            event.currentTarget,
+            event.clientX,
+            event.clientY,
+          );
           if (date) {
             applyRangeSelection(date, event.pointerId);
           }
@@ -159,7 +182,13 @@ export function CandidateDateCalendar(props: {
   );
 }
 
-export function SelectedDatesPanel({ dates, onRemove }: { dates: string[]; onRemove: (date: string) => void }) {
+export function SelectedDatesPanel({
+  dates,
+  onRemove,
+}: {
+  dates: string[];
+  onRemove: (date: string) => void;
+}) {
   if (!dates.length) {
     return <div className="empty-state">候補日がまだ選ばれていません。</div>;
   }
@@ -175,27 +204,12 @@ export function SelectedDatesPanel({ dates, onRemove }: { dates: string[]; onRem
           onClick={() => onRemove(date)}
         >
           <span>{formatDateLabel(date)}</span>
-          <span className="date-chip__remove" aria-hidden="true">×</span>
+          <span className="date-chip__remove" aria-hidden="true">
+            ×
+          </span>
         </button>
       ))}
     </div>
-  );
-}
-
-function ChevronIcon({ direction }: { direction: "left" | "right" }) {
-  const path = direction === "left" ? "M14.5 5.5 8 12l6.5 6.5" : "M9.5 5.5 16 12l-6.5 6.5";
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d={path}
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
   );
 }
 
@@ -203,16 +217,14 @@ function CalendarCell(props: {
   cell: Date;
   monthDate: Date;
   selectedDates: string[];
-  onSetupPaintStart?: (date: string, event: React.PointerEvent<HTMLButtonElement>) => void;
+  onSetupPaintStart?: (
+    date: string,
+    event: React.PointerEvent<HTMLButtonElement>,
+  ) => void;
   onSetDates: (dates: string[]) => void;
 }) {
-  const {
-    cell,
-    monthDate,
-    selectedDates,
-    onSetupPaintStart,
-    onSetDates,
-  } = props;
+  const { cell, monthDate, selectedDates, onSetupPaintStart, onSetDates } =
+    props;
   const date = isoDate(cell);
   const inCurrentMonth = cell.getMonth() === monthDate.getMonth();
   const isCandidate = selectedDates.includes(date);

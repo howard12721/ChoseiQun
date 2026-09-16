@@ -27,6 +27,8 @@ class PollHttpPresenter(
             description = poll.description,
             state = poll.state,
             candidateDates = poll.candidateDates,
+            scheduleType = poll.scheduleType,
+            candidates = poll.candidates.map { CandidateResponse(it.candidateKey, it.date, it.startTime, it.endTime) },
             createdAt = poll.createdAt,
             updatedAt = poll.updatedAt,
             participantUrl = participantUrl(poll.id),
@@ -49,6 +51,8 @@ class PollHttpPresenter(
             title = record.title,
             state = record.state,
             candidateDates = record.candidateDates,
+            scheduleType = record.scheduleType,
+            candidates = record.candidates.map { CandidateResponse(it.candidateKey, it.date, it.startTime, it.endTime) },
             participantCount = record.participantCount,
             respondedByViewer = record.respondedByViewer,
             createdByViewer = record.createdByViewer,
@@ -89,6 +93,9 @@ class PollHttpPresenter(
     private fun daySummary(day: DaySummary): DaySummaryResponse =
         DaySummaryResponse(
             date = day.date,
+            candidateKey = day.candidateKey,
+            startTime = day.startTime,
+            endTime = day.endTime,
             label = formatDateLabel(LocalDate.parse(day.date)),
             yesCount = day.yesCount,
             maybeCount = day.maybeCount,

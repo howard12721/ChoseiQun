@@ -1,86 +1,133 @@
 import type { PollListItem } from "../../entities/poll/model";
 import { selectHomePollLists } from "../../entities/poll/listSelectors";
 import { formatCandidateSummary } from "../../shared/lib/date";
+import { Icon } from "../../shared/ui/Icon";
 
-export function HomePage({ openPolls, onCopy }: { openPolls: PollListItem[]; onCopy: (value: string) => void }) {
+export function HomePage({
+  openPolls,
+  onCopy,
+  list,
+}: {
+  openPolls: PollListItem[];
+  onCopy: (value: string) => void;
+  list?: "created" | "answered";
+}) {
   const { createdPolls, answeredPolls } = selectHomePollLists(openPolls);
-
-  return (
-    <section className="home-stack">
-      <div className="hero-card stack">
-        <h1>調整くん</h1>
-        <div className="command-box" aria-label="日程調整を開始するコマンド">
-          <code>@BOT_chosei イベント名</code>
-          <button className="primary-button" type="button" onClick={() => onCopy("@BOT_chosei イベント名")}>
-            コピー
-          </button>
-        </div>
+  if (list)
+    return (
+      <div className="event-list-page">
+        <a className="text-action" href="/">
+          <Icon name="left" />
+          ホームに戻る
+        </a>
+        <h1>イベント一覧</h1>
+        <nav className="event-kind-switcher" aria-label="イベントの種類">
+          <a
+            className={list === "created" ? "is-selected" : ""}
+            aria-current={list === "created" ? "page" : undefined}
+            href="/created"
+          >
+            作成したイベント
+          </a>
+          <a
+            className={list === "answered" ? "is-selected" : ""}
+            aria-current={list === "answered" ? "page" : undefined}
+            href="/answered"
+          >
+            回答したイベント
+          </a>
+        </nav>
+        <PollListSection
+          title={list === "created" ? "作成したイベント" : "回答したイベント"}
+          polls={list === "created" ? createdPolls : answeredPolls}
+          created={list === "created"}
+          all
+        />
       </div>
-
+    );
+  return (
+    <div className="home-stack">
       <PollListSection
-        id="created-polls"
-        title="作成した日程調整"
+        title="作成したイベント"
         polls={createdPolls}
-        actionLabel="結果を確認"
-        emptyMessage="作成した日程調整はありません"
-        pollHref={(poll) => `/polls/${poll.id}/results`}
+        created
+        all={false}
       />
-
       <PollListSection
-        id="answered-polls"
-        title="回答した日程調整"
+        title="回答したイベント"
         polls={answeredPolls}
-        actionLabel="回答を確認"
-        emptyMessage="回答した日程調整はありません"
-        calendarHref="/answers"
-        pollHref={(poll) => `/polls/${poll.id}`}
+        all={false}
       />
-    </section>
+      <section className="command-box">
+        <strong>新しい日程調整をはじめる</strong>
+        <button
+          type="button"
+          className="command-copy"
+          aria-label="日程調整コマンドをコピー"
+          onClick={() => onCopy("@BOT_chosei イベント名")}
+        >
+          <code>@BOT_chosei イベント名</code>
+          <Icon name="copy" />
+        </button>
+      </section>
+    </div>
   );
 }
 
-function PollListSection(props: {
-  id: string;
+function PollListSection({
+  title,
+  polls,
+  created = false,
+  all,
+}: {
   title: string;
   polls: PollListItem[];
-  actionLabel: string;
-  emptyMessage: string;
-  calendarHref?: string;
-  pollHref: (poll: PollListItem) => string;
+  created?: boolean;
+  all: boolean;
 }) {
-  const { id, title, polls, actionLabel, emptyMessage, calendarHref, pollHref } = props;
-  const headingId = `${id}-title`;
-
   return (
-    <section className="dashboard-card stack open-polls" id={id} aria-labelledby={headingId}>
-      <div className="section-head">
-        <h2 id={headingId}>{title}</h2>
-        {calendarHref ? <a className="text-link" href={calendarHref}>カレンダー →</a> : null}
-      </div>
-
+    <section className="poll-list-section">
+      {!all && (
+        <div className="section-head">
+          <h2>
+            <Icon name={created ? "edit" : "check"} />
+            {title}
+          </h2>
+          <a className="text-action" href={created ? "/created" : "/answered"}>
+            もっと見る
+            <Icon name="right" />
+          </a>
+        </div>
+      )}
       {polls.length ? (
         <ul className="poll-list">
-          {polls.map((poll) => (
-            <li key={poll.id}>
-              <PollCard poll={poll} actionLabel={actionLabel} href={pollHref(poll)} />
+          {(all ? polls : polls.slice(0, 2)).map((poll) => (
+            <li className="poll-card" key={poll.id}>
+              <span className="poll-card__icon">
+                <Icon name="calendar" />
+              </span>
+              <div className="poll-card__body">
+                <strong>{poll.title}</strong>
+                <p className="poll-card__dates">
+                  {formatCandidateSummary(poll.candidateDates)}
+                </p>
+                <div className="poll-card__actions">
+                  <a href={created ? `/setup/${poll.id}` : `/polls/${poll.id}`}>
+                    {created ? "日時を変更" : "回答を変更"} →
+                  </a>
+                  <a href={`/polls/${poll.id}/results`}>結果を見る →</a>
+                </div>
+              </div>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="empty-state">{emptyMessage}</div>
+        <p className="empty-state">
+          {created
+            ? "作成したイベントはありません"
+            : "回答したイベントはありません"}
+        </p>
       )}
     </section>
-  );
-}
-
-function PollCard({ poll, actionLabel, href }: { poll: PollListItem; actionLabel: string; href: string }) {
-  return (
-    <a className="poll-card" href={href}>
-      <div className="poll-card__header">
-        <strong>{poll.title}</strong>
-      </div>
-      <span className="poll-card__dates">{formatCandidateSummary(poll.candidateDates)}</span>
-      <span className="text-link">{actionLabel} →</span>
-    </a>
   );
 }

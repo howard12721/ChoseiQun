@@ -5,9 +5,17 @@ import jp.xhw.choseiqun.application.poll.DeleteCommentCommand
 import jp.xhw.choseiqun.application.poll.PostCommentCommand
 import jp.xhw.choseiqun.application.poll.UpdateCommentCommand
 import jp.xhw.choseiqun.application.poll.UpsertAvailabilityCommand
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.PollState
 import kotlinx.serialization.Serializable
+
+@Serializable
+data class CandidateRequest(val date: String, val startTime: String? = null, val endTime: String? = null)
+
+@Serializable
+data class CandidateResponse(val candidateKey: String, val date: String, val startTime: String? = null, val endTime: String? = null)
 
 @Serializable
 data class ApiError(
@@ -19,12 +27,16 @@ data class CompleteSetupRequest(
     val title: String,
     val description: String = "",
     val candidateDates: List<String> = emptyList(),
+    val scheduleType: ScheduleType = ScheduleType.DATE_ONLY,
+    val candidates: List<CandidateRequest> = emptyList(),
 ) {
     fun toCommand(): CompleteSetupCommand =
         CompleteSetupCommand(
             title = title,
             description = description,
             candidateDates = candidateDates,
+            scheduleType = scheduleType,
+            candidates = candidates.map { PollCandidate(it.date, it.startTime, it.endTime) },
         )
 }
 
@@ -62,6 +74,9 @@ data class DeleteCommentRequest(
 @Serializable
 data class DaySummaryResponse(
     val date: String,
+    val candidateKey: String = date,
+    val startTime: String? = null,
+    val endTime: String? = null,
     val label: String,
     val yesCount: Int,
     val maybeCount: Int,
@@ -101,6 +116,8 @@ data class PollDetailResponse(
     val description: String,
     val state: PollState,
     val candidateDates: List<String> = emptyList(),
+    val scheduleType: ScheduleType = ScheduleType.DATE_ONLY,
+    val candidates: List<CandidateResponse> = emptyList(),
     val createdAt: String,
     val updatedAt: String,
     val participantUrl: String,
@@ -117,6 +134,8 @@ data class PollListItemResponse(
     val title: String,
     val state: PollState,
     val candidateDates: List<String> = emptyList(),
+    val scheduleType: ScheduleType = ScheduleType.DATE_ONLY,
+    val candidates: List<CandidateResponse> = emptyList(),
     val participantCount: Int,
     val respondedByViewer: Boolean = false,
     val createdByViewer: Boolean = false,

@@ -11,7 +11,11 @@ export function addMonths(date: Date, amount: number) {
 export function buildMonthCells(monthDate: Date) {
   const start = startOfMonth(monthDate);
   const firstDay = start.getDay();
-  const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  const daysInMonth = new Date(
+    start.getFullYear(),
+    start.getMonth() + 1,
+    0,
+  ).getDate();
   const cells: Array<Date | null> = [];
 
   for (let index = 0; index < firstDay; index += 1) {
@@ -57,7 +61,9 @@ export function sortDates(dates: string[]) {
 
 export function initialMonthForDates(dates: string[]) {
   const first = sortDates(dates)[0];
-  return first ? startOfMonth(new Date(`${first}T00:00:00`)) : startOfMonth(new Date());
+  return first
+    ? startOfMonth(new Date(`${first}T00:00:00`))
+    : startOfMonth(new Date());
 }
 
 export function formatDateLabel(date: string) {
@@ -83,9 +89,9 @@ export function formatCandidateSummary(dates?: string[] | null) {
   }
   const labels = sortDates(dates).map(formatDateLabel);
   if (labels.length <= 4) {
-    return labels.join(", ");
+    return labels.join("・");
   }
-  return `${labels.slice(0, 4).join(", ")} ほか${labels.length - 4}日`;
+  return `${labels.slice(0, 4).join("・")} ほか${labels.length - 4}日`;
 }
 
 export function formatMonthDay(date: string) {

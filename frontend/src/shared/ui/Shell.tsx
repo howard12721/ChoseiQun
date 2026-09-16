@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon } from "./Icon";
 
 export type FlashTone = "success" | "error" | "info";
 
@@ -25,6 +26,26 @@ export function Shell({
         <a className="shell-brand" href="/" aria-label="ChoseiQun トップへ">
           <span className="shell-product">ChoseiQun</span>
         </a>
+        <nav className="shell-nav" aria-label="メインナビゲーション">
+          <a
+            className={`nav-link nav-link--schedule${window.location.pathname !== "/answers" ? " is-active" : ""}`}
+            href="/"
+            aria-current={window.location.pathname === "/" ? "page" : undefined}
+          >
+            <Icon name="calendar" />
+            日程調整
+          </a>
+          <a
+            className={`nav-link${window.location.pathname === "/answers" ? " is-active" : ""}`}
+            href="/answers"
+            aria-current={
+              window.location.pathname === "/answers" ? "page" : undefined
+            }
+          >
+            <Icon name="calendar" />
+            カレンダー
+          </a>
+        </nav>
       </header>
       <main className="shell-content" id="main-content">
         {children}
@@ -36,7 +57,11 @@ export function Shell({
             aria-atomic="true"
           >
             <span className="floating-flash__mark" aria-hidden="true">
-              {flash.tone === "error" ? "!" : flash.tone === "success" ? "✓" : "i"}
+              {flash.tone === "error"
+                ? "!"
+                : flash.tone === "success"
+                  ? "✓"
+                  : "i"}
             </span>
             <span>{flash.message}</span>
             {flash.tone === "error" && onDismissFlash ? (
@@ -70,8 +95,13 @@ export function Hero({
   onAction?: () => void;
 }) {
   return (
-    <section className="hero-card hero-card--compact" aria-busy={loading || undefined}>
-      {loading ? <span className="loading-indicator" aria-hidden="true" /> : null}
+    <section
+      className="hero-card hero-card--compact"
+      aria-busy={loading || undefined}
+    >
+      {loading ? (
+        <span className="loading-indicator" aria-hidden="true" />
+      ) : null}
       <h1>{title}</h1>
       <p>{body}</p>
       <div className="button-row">

@@ -1,5 +1,5 @@
 export type AppRoute =
-  | { kind: "home" }
+  | { kind: "home"; list?: "created" | "answered" }
   | { kind: "answers" }
   | { kind: "setup"; id: string }
   | { kind: "poll"; id: string }
@@ -10,6 +10,8 @@ export function resolveRoute(): AppRoute {
 }
 
 export function parseRoute(pathname: string): AppRoute {
+  if (pathname === "/created" || pathname === "/answered")
+    return { kind: "home", list: pathname.slice(1) as "created" | "answered" };
   if (pathname === "/answers") {
     return { kind: "answers" };
   }

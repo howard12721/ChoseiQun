@@ -6,7 +6,7 @@ import kotlinx.datetime.LocalDate
 
 class PollSummaryCalculator {
     fun calculate(poll: PollRecord): PollSummary {
-        if (poll.candidateDates.isEmpty()) {
+        if (poll.candidates.isEmpty()) {
             return PollSummary(
                 participantCount = poll.participants.size,
                 recommendedDates = emptyList(),
@@ -15,14 +15,17 @@ class PollSummaryCalculator {
         }
 
         val days =
-            poll.candidateDates.map { key ->
-                parseDate(key)
+            poll.candidates.map { candidate ->
+                val key = candidate.candidateKey
                 val responses = poll.participants.mapNotNull { it.responses[key] }
                 val yesCount = responses.count { it == DayAvailability.YES }
                 val maybeCount = responses.count { it == DayAvailability.MAYBE }
                 val noCount = responses.count { it == DayAvailability.NO }
                 DaySummary(
-                    date = key,
+                    date = candidate.date,
+                    candidateKey = key,
+                    startTime = candidate.startTime,
+                    endTime = candidate.endTime,
                     yesCount = yesCount,
                     maybeCount = maybeCount,
                     noCount = noCount,
@@ -35,7 +38,7 @@ class PollSummaryCalculator {
                     compareByDescending<DaySummary> { it.score }
                         .thenByDescending { it.yesCount }
                         .thenBy { it.noCount }
-                        .thenBy { it.date },
+                        .thenBy { it.candidateKey },
                 ).take(3)
 
         return PollSummary(

@@ -5,6 +5,8 @@ import jp.xhw.choseiqun.application.port.PollRepository
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.ParticipantCommentRecord
 import jp.xhw.choseiqun.domain.ParticipantRecord
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.PollRecord
 import jp.xhw.choseiqun.domain.PollState
 import jp.xhw.choseiqun.domain.ViewerIdentity
@@ -115,7 +117,7 @@ class PollServiceTest {
                 FakePollRepository(
                     draftPoll().copy(
                         state = PollState.OPEN,
-                        candidateDates = listOf("2026-07-20", "2026-07-21"),
+                        candidates = listOf("2026-07-20", "2026-07-21").map { PollCandidate(it) },
                         participants =
                             listOf(
                                 ParticipantRecord(
@@ -140,7 +142,6 @@ class PollServiceTest {
                             responses =
                                 mapOf(
                                     "2026-07-20" to DayAvailability.YES,
-                                    "2099-01-01" to DayAvailability.MAYBE,
                                 ),
                         ),
                     viewerIdentity = viewer,
@@ -210,6 +211,66 @@ class PollServiceTest {
             }
             Unit
         }
+
+    @Test
+    fun `timed candidates deduplicate and keep separate answers with NO defaults`() = runBlocking {
+        val repository = FakePollRepository(draftPoll())
+        val service = service(repository)
+        val first = PollCandidate("2026-09-21", "18:00", "19:00")
+        val second = PollCandidate("2026-09-21", "19:30", "20:30")
+        val setup = service.completeSetup("poll1234", CompleteSetupCommand(
+            title = "会議", scheduleType = ScheduleType.TIMED,
+            candidateDates = listOf(first.date), candidates = listOf(second, first, first),
+        ), viewer)
+        assertEquals(listOf(first, second), setup.poll.candidates)
+        val answered = service.upsertAvailability("poll1234", UpsertAvailabilityCommand(
+            mapOf(first.candidateKey to DayAvailability.YES),
+        ), viewer)
+        assertEquals(mapOf(first.candidateKey to DayAvailability.YES, second.candidateKey to DayAvailability.NO), answered.poll.participants.single().responses)
+        assertEquals(listOf(1, 0), answered.summary.days.map { it.yesCount })
+        assertEquals(listOf(0, 1), answered.summary.days.map { it.noCount })
+        assertFailsWith<IllegalArgumentException> {
+            service.upsertAvailability("poll1234", UpsertAvailabilityCommand(mapOf("2026-09-22" to DayAvailability.YES)), viewer)
+        }
+        val edited = service.completeSetup("poll1234", CompleteSetupCommand(
+            title = "会議", scheduleType = ScheduleType.TIMED,
+            candidates = listOf(first.copy(startTime = "17:00"), second),
+        ), viewer)
+        assertEquals(setOf(DayAvailability.NO), edited.poll.participants.single().responses.values.toSet())
+    }
+
+    @Test
+    fun `setup rejects missing and malformed times and invalid dates without saving`() = runBlocking {
+        val repository = FakePollRepository(draftPoll())
+        val service = service(repository)
+        val badCandidates = listOf(
+            PollCandidate("2026-09-21"),
+            PollCandidate("2026-09-21", "18:00", null),
+            PollCandidate("2026-09-21", "25:00", "26:00"),
+            PollCandidate("2026-09-21", "18:00:00", "19:00"),
+            PollCandidate("2026-09-21", "18:00", "18:00"),
+            PollCandidate("2026-09-21", "18:00", "17:59"),
+            PollCandidate("2026-09-21", "23:59", "00:00"),
+            PollCandidate("2026-02-30", "18:00", "19:00"),
+        )
+        for (candidate in badCandidates) {
+            assertFailsWith<IllegalArgumentException> {
+                service.completeSetup("poll1234", CompleteSetupCommand(title = "会議", scheduleType = ScheduleType.TIMED, candidates = listOf(candidate)), viewer)
+            }
+            assertEquals(draftPoll(), repository.poll)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            service.completeSetup("poll1234", CompleteSetupCommand(
+                title = "会議", scheduleType = ScheduleType.TIMED,
+                candidateDates = listOf("2026-09-21", "2026-09-22"),
+                candidates = listOf(PollCandidate("2026-09-21", "18:00", "19:00")),
+            ), viewer)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            service.completeSetup("poll1234", CompleteSetupCommand(title = "会議", candidates = listOf(PollCandidate("2026-09-21", "18:00", "19:00"))), viewer)
+        }
+        assertEquals(draftPoll(), repository.poll)
+    }
 
     private fun service(repository: PollRepository): PollService =
         PollService(

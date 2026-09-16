@@ -2,6 +2,8 @@ package jp.xhw.choseiqun.application.poll
 
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.ParticipantRecord
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.PollRecord
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -61,7 +63,7 @@ class PollSummaryCalculatorTest {
         PollRecord(
             id = "poll1234",
             title = "会議日程",
-            candidateDates = candidateDates,
+            candidates = candidateDates.map { PollCandidate(it) },
             createdAt = "2026-07-01T00:00:00Z",
             updatedAt = "2026-07-01T00:00:00Z",
             organizerUserId = "organizer",

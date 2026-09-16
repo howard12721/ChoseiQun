@@ -2,12 +2,26 @@ import { useEffect, useState } from "react";
 import { useFlash } from "../shared/ui/useFlash";
 import { useSetupPoll } from "../entities/poll/usePollResource";
 import { saveSetup } from "../features/poll-setup/api";
-import type { SetupSelection } from "../features/poll-setup/model";
+import {
+  initialTimeRanges,
+  missingTimes,
+  setupCandidates,
+  updateSelectedDates,
+  type SetupSelection,
+} from "../features/poll-setup/model";
 import { SetupPage } from "../features/poll-setup/SetupPage";
-import { copyAndNotify } from "../shared/lib/clipboard";
-import { addMonths, initialMonthForDates, sortDates, startOfMonth } from "../shared/lib/date";
+import {
+  addMonths,
+  initialMonthForDates,
+  sortDates,
+  startOfMonth,
+} from "../shared/lib/date";
 import { toErrorMessage } from "../shared/lib/errors";
-import { ErrorRoute, LoadingRoute, MissingPollRoute } from "../shared/ui/RouteState";
+import {
+  ErrorRoute,
+  LoadingRoute,
+  MissingPollRoute,
+} from "../shared/ui/RouteState";
 import { Shell } from "../shared/ui/Shell";
 
 export function SetupRoute({ pollId }: { pollId: string }) {
@@ -15,6 +29,8 @@ export function SetupRoute({ pollId }: { pollId: string }) {
   const { flash, dismissFlash, showFlash } = useFlash();
   const [selection, setSelection] = useState<SetupSelection>({
     selectedDates: [],
+    scheduleType: "DATE_ONLY",
+    timeRanges: {},
     viewMonth: startOfMonth(new Date()),
   });
   const [selectionInitialized, setSelectionInitialized] = useState(false);
@@ -26,44 +42,24 @@ export function SetupRoute({ pollId }: { pollId: string }) {
     }
     setSelection({
       selectedDates: sortDates(resource.data.candidateDates),
+      scheduleType: resource.data.scheduleType ?? "DATE_ONLY",
+      timeRanges: initialTimeRanges(resource.data),
       viewMonth: initialMonthForDates(resource.data.candidateDates),
     });
     setSelectionInitialized(true);
   }, [resource.data]);
 
-  function toggleDate(date: string) {
-    setSelection((current) => {
-      const selectedDates = current.selectedDates.includes(date)
-        ? current.selectedDates.filter((value) => value !== date)
-        : [...current.selectedDates, date];
-      return { ...current, selectedDates: sortDates(selectedDates) };
-    });
-  }
-
-  function replaceDates(dates: string[]) {
-    setSelection((current) => ({
-      ...current,
-      selectedDates: sortDates(dates),
-      viewMonth: initialMonthForDates(dates),
-    }));
-  }
-
   function setDates(dates: string[]) {
-    setSelection((current) => {
-      const selectedDates = sortDates(dates);
-      if (
-        current.selectedDates.length === selectedDates.length &&
-        current.selectedDates.every((value, index) => value === selectedDates[index])
-      ) {
-        return current;
-      }
-      return { ...current, selectedDates };
-    });
+    setSelection((current) => updateSelectedDates(current, sortDates(dates)));
   }
 
   async function submit(formData: FormData) {
     const poll = resource.data;
     if (!poll || saving) {
+      return;
+    }
+    if (missingTimes(selection)) {
+      showFlash("未設定の日付があります！", "error");
       return;
     }
     if (!selection.selectedDates.length) {
@@ -77,6 +73,8 @@ export function SetupRoute({ pollId }: { pollId: string }) {
         title: `${formData.get("title") ?? ""}`.trim(),
         description: `${formData.get("description") ?? ""}`.trim(),
         candidateDates: sortDates(selection.selectedDates),
+        scheduleType: selection.scheduleType,
+        candidates: setupCandidates(selection),
       });
       window.location.assign(nextPoll.participantUrl);
     } finally {
@@ -86,16 +84,23 @@ export function SetupRoute({ pollId }: { pollId: string }) {
 
   return (
     <Shell flash={flash} onDismissFlash={dismissFlash}>
-      {resource.loading || (resource.data && !selectionInitialized) ? <LoadingRoute /> : null}
+      {resource.loading || (resource.data && !selectionInitialized) ? (
+        <LoadingRoute />
+      ) : null}
       {!resource.loading && resource.error ? (
         <ErrorRoute error={resource.error} onRetry={resource.reload} />
       ) : null}
-      {!resource.loading && !resource.error && !resource.data ? <MissingPollRoute /> : null}
-      {!resource.loading && !resource.error && resource.data && selectionInitialized ? (
+      {!resource.loading && !resource.error && !resource.data ? (
+        <MissingPollRoute />
+      ) : null}
+      {!resource.loading &&
+      !resource.error &&
+      resource.data &&
+      selectionInitialized ? (
         <SetupPage
           poll={resource.data}
           selection={selection}
-          onToggleDate={toggleDate}
+          onChangeSelection={setSelection}
           onSetDates={setDates}
           onShiftMonth={(amount) =>
             setSelection((current) => ({
@@ -103,18 +108,12 @@ export function SetupRoute({ pollId }: { pollId: string }) {
               viewMonth: addMonths(current.viewMonth, amount),
             }))
           }
-          onGoToCurrentMonth={() =>
-            setSelection((current) => ({
-              ...current,
-              viewMonth: startOfMonth(new Date()),
-            }))
-          }
-          onClearDates={() => replaceDates([])}
           isSaving={saving}
           onSubmit={(formData) =>
-            submit(formData).catch((caught) => showFlash(toErrorMessage(caught), "error"))
+            submit(formData).catch((caught) =>
+              showFlash(toErrorMessage(caught), "error"),
+            )
           }
-          onCopy={(value) => copyAndNotify(value, showFlash)}
         />
       ) : null}
     </Shell>

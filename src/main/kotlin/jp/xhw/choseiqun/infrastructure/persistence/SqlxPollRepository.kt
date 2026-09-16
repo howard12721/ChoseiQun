@@ -7,6 +7,8 @@ import io.github.smyrgeorge.sqlx4k.impl.extensions.asLong
 import io.github.smyrgeorge.sqlx4k.mysql.IMySQL
 import jp.xhw.choseiqun.application.port.PollListRecord
 import jp.xhw.choseiqun.application.port.PollRepository
+import jp.xhw.choseiqun.domain.PollCandidate
+import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.ParticipantCommentRecord
 import jp.xhw.choseiqun.domain.ParticipantRecord
@@ -53,6 +55,7 @@ class SqlxPollRepository(
                             title,
                             description,
                             state,
+                            schedule_type,
                             created_at,
                             updated_at,
                             organizer_user_id,
@@ -64,6 +67,7 @@ class SqlxPollRepository(
                             :title,
                             :description,
                             :state,
+                            :scheduleType,
                             :createdAt,
                             :updatedAt,
                             :organizerUserId,
@@ -75,6 +79,7 @@ class SqlxPollRepository(
                             title = VALUES(title),
                             description = VALUES(description),
                             state = VALUES(state),
+                            schedule_type = VALUES(schedule_type),
                             created_at = VALUES(created_at),
                             updated_at = VALUES(updated_at),
                             organizer_user_id = VALUES(organizer_user_id),
@@ -101,19 +106,22 @@ class SqlxPollRepository(
 
             execute(
                 Statement
-                    .create("DELETE FROM poll_candidate_dates WHERE poll_id = :pollId")
+                    .create("DELETE FROM poll_candidates WHERE poll_id = :pollId")
                     .bind("pollId", record.id),
             ).getOrThrow()
-            record.candidateDates.forEachIndexed { index, candidateDate ->
+            record.candidates.forEachIndexed { index, candidate ->
                 execute(
                     Statement
                         .create(
                             """
-                            INSERT INTO poll_candidate_dates (poll_id, candidate_date, sort_order)
-                            VALUES (:pollId, :candidateDate, :sortOrder)
+                            INSERT INTO poll_candidates (poll_id, candidate_key, date, start_time, end_time, sort_order)
+                            VALUES (:pollId, :candidateKey, :date, :startTime, :endTime, :sortOrder)
                             """.trimIndent(),
                         ).bind("pollId", record.id)
-                        .bind("candidateDate", candidateDate)
+                        .bind("candidateKey", candidate.candidateKey)
+                        .bind("date", candidate.date)
+                        .bind("startTime", candidate.startTime)
+                        .bind("endTime", candidate.endTime)
                         .bind("sortOrder", index),
                 ).getOrThrow()
             }
@@ -197,16 +205,16 @@ class SqlxPollRepository(
                                     """
                                     INSERT INTO participant_responses (
                                         participant_id,
-                                        response_date,
+                                        candidate_key,
                                         availability
                                     ) VALUES (
                                         :participantId,
-                                        :responseDate,
+                                        :candidateKey,
                                         :availability
                                     )
                                     """.trimIndent(),
                                 ).bind("participantId", participantId)
-                                .bind("responseDate", date)
+                                .bind("candidateKey", date)
                                 .bind("availability", availability.name),
                         ).getOrThrow()
                     }
@@ -225,6 +233,7 @@ class SqlxPollRepository(
                             SELECT p.id,
                                    p.title,
                                    p.state,
+                                   p.schedule_type,
                                    p.updated_at,
                                    (
                                        SELECT COUNT(*)
@@ -237,7 +246,10 @@ class SqlxPollRepository(
                                        ELSE 0
                                    END AS created_by_viewer,
                                    viewer_participants.participant_id AS viewer_participant_id,
-                                   candidate_dates.candidate_date,
+                                   CAST(candidate_dates.candidate_key AS CHAR CHARACTER SET utf8mb4) AS candidate_key,
+                                   CAST(candidate_dates.date AS CHAR) AS date,
+                                   TIME_FORMAT(candidate_dates.start_time, '%H:%i') AS start_time,
+                                   TIME_FORMAT(candidate_dates.end_time, '%H:%i') AS end_time,
                                    viewer_responses.availability AS viewer_availability
                             FROM (
                                 SELECT id AS poll_id
@@ -261,11 +273,11 @@ class SqlxPollRepository(
                                 GROUP BY poll_id
                             ) AS viewer_participants
                                 ON viewer_participants.poll_id = p.id
-                            LEFT JOIN poll_candidate_dates AS candidate_dates
+                            LEFT JOIN poll_candidates AS candidate_dates
                                 ON candidate_dates.poll_id = p.id
                             LEFT JOIN participant_responses AS viewer_responses
                                 ON viewer_responses.participant_id = viewer_participants.participant_id
-                               AND viewer_responses.response_date = candidate_dates.candidate_date
+                               AND viewer_responses.candidate_key = candidate_dates.candidate_key
                             ORDER BY p.updated_at DESC, candidate_dates.sort_order ASC
                             """.trimIndent(),
                         ).bind("viewerUserId", viewerUserId),
@@ -278,7 +290,7 @@ class SqlxPollRepository(
                     val first = pollRows.first()
                     val viewerResponses =
                         pollRows.mapNotNull { row ->
-                            val date = row.get("candidate_date").asStringOrNull() ?: return@mapNotNull null
+                            val date = row.get("candidate_key").asStringOrNull() ?: return@mapNotNull null
                             val availability = row.get("viewer_availability").asStringOrNull() ?: return@mapNotNull null
                             date to DayAvailability.valueOf(availability)
                         }.toMap()
@@ -286,7 +298,10 @@ class SqlxPollRepository(
                         id = first.get("id").asString(),
                         title = first.get("title").asString(),
                         state = PollState.valueOf(first.get("state").asString()),
-                        candidateDates = pollRows.mapNotNull { row -> row.get("candidate_date").asStringOrNull() },
+                        scheduleType = ScheduleType.valueOf(first.get("schedule_type").asString()),
+                        candidates = pollRows.mapNotNull { row ->
+                            row.get("candidate_key").asStringOrNull()?.let { row.toCandidate() }
+                        },
                         participantCount = first.get("participant_count").asLong().toInt(),
                         respondedByViewer = first.get("viewer_participant_id").asStringOrNull() != null,
                         createdByViewer = first.get("created_by_viewer").asLong() == 1L,
@@ -306,6 +321,7 @@ class SqlxPollRepository(
                                title,
                                description,
                                state,
+                               schedule_type,
                                created_at,
                                updated_at,
                                organizer_user_id,
@@ -323,25 +339,27 @@ class SqlxPollRepository(
                 ?: return null
 
         return poll.copy(
-            candidateDates = readCandidateDates(id),
+            candidates = readCandidates(id),
             participants = readParticipants(id),
         )
     }
 
-    private suspend fun QueryExecutor.readCandidateDates(pollId: String): List<String> =
+    private suspend fun QueryExecutor.readCandidates(pollId: String): List<PollCandidate> =
         fetchAll(
             Statement
                 .create(
                     """
-                    SELECT candidate_date
-                    FROM poll_candidate_dates
+                    SELECT CAST(date AS CHAR) AS date,
+                           TIME_FORMAT(start_time, '%H:%i') AS start_time,
+                           TIME_FORMAT(end_time, '%H:%i') AS end_time
+                    FROM poll_candidates
                     WHERE poll_id = :pollId
                     ORDER BY sort_order ASC
                     """.trimIndent(),
                 ).bind("pollId", pollId),
         ).getOrThrow()
             .rows
-            .map { row -> row.get("candidate_date").asString() }
+            .map { row -> row.toCandidate() }
 
     private suspend fun QueryExecutor.readParticipants(pollId: String): List<ParticipantRecord> {
         val participantRows =
@@ -386,13 +404,13 @@ class SqlxPollRepository(
                     .create(
                         """
                         SELECT responses.participant_id,
-                               responses.response_date,
+                               CAST(responses.candidate_key AS CHAR CHARACTER SET utf8mb4) AS candidate_key,
                                responses.availability
                         FROM participant_responses AS responses
                         INNER JOIN poll_participants AS participants
                             ON participants.id = responses.participant_id
                         WHERE participants.poll_id = :pollId
-                        ORDER BY responses.participant_id ASC, responses.response_date ASC
+                        ORDER BY responses.participant_id ASC, responses.candidate_key ASC
                         """.trimIndent(),
                     ).bind("pollId", pollId),
             ).getOrThrow()
@@ -415,7 +433,7 @@ class SqlxPollRepository(
                     },
                 responses =
                     responsesByParticipantId[participantId].orEmpty().associate { responseRow ->
-                        responseRow.get("response_date").asString() to
+                        responseRow.get("candidate_key").asString() to
                             DayAvailability.valueOf(responseRow.get("availability").asString())
                     },
                 updatedAt = row.get("updated_at").asString(),
@@ -429,6 +447,7 @@ private fun Statement.bindPoll(record: PollRecord): Statement =
         .bind("title", record.title)
         .bind("description", record.description)
         .bind("state", record.state.name)
+        .bind("scheduleType", record.scheduleType.name)
         .bind("createdAt", record.createdAt)
         .bind("updatedAt", record.updatedAt)
         .bind("organizerUserId", record.organizerUserId)
@@ -442,7 +461,8 @@ private fun ResultSet.Row.toPollRecordBase(): PollRecord =
         title = get("title").asString(),
         description = get("description").asString(),
         state = PollState.valueOf(get("state").asString()),
-        candidateDates = emptyList(),
+        scheduleType = ScheduleType.valueOf(get("schedule_type").asString()),
+        candidates = emptyList(),
         createdAt = get("created_at").asString(),
         updatedAt = get("updated_at").asString(),
         organizerUserId = get("organizer_user_id").asString(),
@@ -456,3 +476,9 @@ private fun ResultSet.Row.Column.asUuidFromHexOrNull(): Uuid? =
     asStringOrNull()
         ?.takeIf { it.isNotEmpty() }
         ?.let(Uuid::parseHex)
+
+private fun ResultSet.Row.toCandidate(): PollCandidate = PollCandidate(
+    date = get("date").asString(),
+    startTime = get("start_time").asStringOrNull(),
+    endTime = get("end_time").asStringOrNull(),
+)
