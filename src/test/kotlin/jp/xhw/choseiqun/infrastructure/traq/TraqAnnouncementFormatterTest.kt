@@ -4,7 +4,6 @@ import jp.xhw.choseiqun.domain.DayAvailability
 import jp.xhw.choseiqun.domain.ParticipantCommentRecord
 import jp.xhw.choseiqun.domain.ParticipantRecord
 import jp.xhw.choseiqun.domain.PollCandidate
-import jp.xhw.choseiqun.domain.ScheduleType
 import jp.xhw.choseiqun.domain.PollRecord
 import jp.xhw.choseiqun.domain.PollState
 import kotlin.test.Test
@@ -51,7 +50,7 @@ class TraqAnnouncementFormatterTest {
             )
         val message = TraqAnnouncementFormatter.format(poll, "https://example.com")
 
-        assertContains(message, "日ごとの回答:")
+        assertContains(message, "候補ごとの回答:")
         assertContains(message, "3/3(日): :@howard127: (:@howard128:)")
         assertContains(message, "3/4(月): :@howard128:")
     }
@@ -122,6 +121,6 @@ class TraqAnnouncementFormatterTest {
 
         assertContains(message, "設定URL: https://example.com/setup/poll1234")
         assertFalse(message.contains("?token="))
-        assertFalse(message.contains("参加者向けリンク:"))
+        assertFalse(message.contains("回答する"))
     }
 }
