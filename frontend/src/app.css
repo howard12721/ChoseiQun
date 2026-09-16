@@ -1026,8 +1026,7 @@ input::placeholder {
 .response-matrix {
   border-collapse: separate;
   border-spacing: 0;
-  /* Let the fixed column widths determine the table width. */
-  width: 0;
+  width: 100%;
   table-layout: fixed;
 }
 .response-matrix th {
