@@ -1,1 +1,1 @@
-FROM ghcr.io/howard12721/choseiqun:sha-425776f401eb2c237053e6e8b677b68ea7d134c8
+FROM ghcr.io/howard12721/choseiqun:sha-b1ced394b559eefa059c39232101507ed32b6a25
