@@ -516,8 +516,10 @@ input::placeholder {
 .day-cell.is-today {
   border-color: var(--color-border-focus);
 }
-.day-cell:hover {
-  background: var(--color-background-accent-subtle);
+@media (hover: hover) and (pointer: fine) {
+  .day-cell:hover {
+    background: var(--color-background-accent-subtle);
+  }
 }
 .selected-dates-summary {
   display: flex;
@@ -578,6 +580,9 @@ input::placeholder {
   align-items: center;
   gap: 12px;
   width: 100%;
+}
+.time-toggle:disabled .time-toggle__heading {
+  opacity: 0.5;
 }
 .time-toggle__heading > .icon {
   color: var(--color-text-action);
@@ -681,6 +686,8 @@ input::placeholder {
   position: relative;
 }
 .time-field input {
+  max-width: 100%;
+  appearance: none;
   height: 52px;
   padding: 8px 34px 8px 12px;
   font-size: 20px;
@@ -691,7 +698,8 @@ input::placeholder {
   width: 16px;
   height: 16px;
   position: absolute;
-  top: 18px;
+  top: 50%;
+  transform: translateY(-50%);
   right: 12px;
   color: var(--color-text-action);
   pointer-events: none;
@@ -1510,12 +1518,14 @@ input::placeholder {
     width: 100%;
   }
   .time-field input {
-    font-size: 20px;
-    padding-left: 12px;
-    padding-right: 28px;
+    height: 44px;
+    font-size: 16px;
+    padding: 6px 24px 6px 8px;
   }
   .time-field .icon {
-    right: 10px;
+    width: 14px;
+    height: 14px;
+    right: 8px;
   }
   .time-toggle__heading {
     gap: 8px;
@@ -1528,6 +1538,10 @@ input::placeholder {
   }
   .bulk-dialog__actions {
     gap: 8px;
+  }
+  .bulk-dialog__actions button {
+    padding-inline: 12px;
+    white-space: nowrap;
   }
   .availability-row {
     flex-direction: column;
@@ -1733,10 +1747,6 @@ input::placeholder {
   .poll-card__actions {
     gap: 12px;
     font-size: 12px;
-  }
-  .time-field input {
-    font-size: 16px;
-    padding-left: 8px;
   }
   .time-toggle__heading .section-title {
     font-size: 20px;

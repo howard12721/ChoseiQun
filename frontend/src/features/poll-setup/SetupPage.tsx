@@ -46,6 +46,10 @@ export function SetupPage(props: {
   const [bulkRanges, setBulkRanges] = useState<TimeRange[]>([
     { startTime: "18:00", endTime: "19:00" },
   ]);
+  const hasSelectedDates = selection.selectedDates.length > 0;
+  useEffect(() => {
+    if (!hasSelectedDates) setExpanded(false);
+  }, [hasSelectedDates]);
   const isTimed = selection.scheduleType === "TIMED";
   const hasMissingTimes = missingTimes(selection);
   const hasInvalidTimeOrder = selection.selectedDates.some((date) =>
@@ -155,6 +159,7 @@ export function SetupPage(props: {
                 type="button"
                 aria-expanded={expanded}
                 aria-controls="daily-time-editors"
+                disabled={!hasSelectedDates}
                 onClick={() => setExpanded(!expanded)}
               >
                 <span className="time-toggle__heading">
