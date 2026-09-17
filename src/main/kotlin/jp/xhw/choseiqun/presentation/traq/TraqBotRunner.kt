@@ -5,26 +5,20 @@ import jp.xhw.choseiqun.application.poll.PollCreationUseCase
 import jp.xhw.choseiqun.application.port.IdentityDirectory
 import jp.xhw.trakt.bot.context.base.sendMessage
 import jp.xhw.trakt.bot.context.bot.BotContext
-import jp.xhw.trakt.bot.context.bot.fetchMe
 import jp.xhw.trakt.bot.infrastructure.client.TraktClient
 import jp.xhw.trakt.bot.infrastructure.client.runtime
 import jp.xhw.trakt.bot.model.BotEvents
 import jp.xhw.trakt.bot.onMessageCreated
-import kotlin.uuid.Uuid
 
-internal fun extractBotMentionPrefix(
-    content: String,
-    botUserId: Uuid,
-): String? =
+internal fun extractBotMentionPrefix(content: String): String? =
     Regex(
-        """^!\{"type":"(user|group)","raw":"(?:\\.|[^"\\])*","id":"${Regex.escape(botUserId.toString())}"}""",
+        """^!\{"type":"(user|group)","raw":"(?:\\.|[^"\\])*","id":"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"}""",
     ).find(content)?.value
 
 class TraqBotRunner private constructor(
     private val client: TraktClient,
     private val pollCreation: PollCreationUseCase,
     private val identityDirectory: IdentityDirectory,
-    private val botUserId: Uuid,
 ) {
     private val runtime =
         client.runtime {
@@ -34,22 +28,16 @@ class TraqBotRunner private constructor(
         }
 
     companion object {
-        suspend fun create(
+        fun create(
             client: TraktClient,
             pollCreation: PollCreationUseCase,
             identityDirectory: IdentityDirectory,
-        ): TraqBotRunner {
-            var botUserId: Uuid? = null
-            client.execute {
-                botUserId = fetchMe().id.value
-            }
-            return TraqBotRunner(
+        ): TraqBotRunner =
+            TraqBotRunner(
                 client = client,
                 pollCreation = pollCreation,
                 identityDirectory = identityDirectory,
-                botUserId = requireNotNull(botUserId) { "Bot User IDを取得できませんでした" },
             )
-        }
     }
 
     suspend fun run() {
@@ -63,7 +51,7 @@ class TraqBotRunner private constructor(
     context(_: BotContext)
     private suspend fun handleMessage(event: BotEvents.MessageCreated) {
         val content = event.message.content.trim()
-        val botMentionPrefix = extractBotMentionPrefix(content, botUserId) ?: return
+        val botMentionPrefix = extractBotMentionPrefix(content) ?: return
 
         when {
             content == botMentionPrefix -> {
