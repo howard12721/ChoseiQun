@@ -17,7 +17,7 @@ internal fun extractBotMentionPrefix(
     botUserId: Uuid,
 ): String? =
     Regex(
-        """^!\{"type":"user","raw":"(?:\\.|[^"\\])*","id":"${Regex.escape(botUserId.toString())}"}""",
+        """^!\{"type":"(user|group)","raw":"(?:\\.|[^"\\])*","id":"${Regex.escape(botUserId.toString())}"}""",
     ).find(content)?.value
 
 class TraqBotRunner private constructor(
