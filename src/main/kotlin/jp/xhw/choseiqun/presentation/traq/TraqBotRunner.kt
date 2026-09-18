@@ -5,9 +5,11 @@ import jp.xhw.choseiqun.application.poll.PollCreationUseCase
 import jp.xhw.choseiqun.application.port.IdentityDirectory
 import jp.xhw.trakt.bot.context.base.sendMessage
 import jp.xhw.trakt.bot.context.bot.BotContext
+import jp.xhw.trakt.bot.context.bot.editMe
 import jp.xhw.trakt.bot.infrastructure.client.TraktClient
 import jp.xhw.trakt.bot.infrastructure.client.runtime
 import jp.xhw.trakt.bot.model.BotEvents
+import jp.xhw.trakt.bot.onInitialized
 import jp.xhw.trakt.bot.onMessageCreated
 
 internal fun extractBotMentionPrefix(content: String): String? =
@@ -22,6 +24,9 @@ class TraqBotRunner private constructor(
 ) {
     private val runtime =
         client.runtime {
+            onInitialized { _ ->
+                handleProfile()
+            }
             onMessageCreated { event ->
                 handleMessage(event)
             }
@@ -49,18 +54,27 @@ class TraqBotRunner private constructor(
     }
 
     context(_: BotContext)
+    private suspend fun handleProfile() {
+        editMe(bio = "`@chosei <イベント名>`で日程調整を開始")
+    }
+
+    context(_: BotContext)
     private suspend fun handleMessage(event: BotEvents.MessageCreated) {
         val content = event.message.content.trim()
         val botMentionPrefix = extractBotMentionPrefix(content) ?: return
 
         when {
             content == botMentionPrefix -> {
-                event.message.channel.sendMessage("```\n@BOT_chosei <イベント名>\n```\nで日程調整を開始します")
+                event.message.channel.sendMessage("```\n@chosei <イベント名>\n```\nで日程調整を開始します")
             }
 
             else -> {
                 val title = content.removePrefix(botMentionPrefix).trim()
-                val organizer = identityDirectory.resolveByUserId(event.message.author.id.value.toString())
+                val organizer =
+                    identityDirectory.resolveByUserId(
+                        event.message.author.id.value
+                            .toString(),
+                    )
                 if (organizer == null) {
                     event.message.channel.sendMessage("ユーザー情報を取得できませんでした。しばらくしてから再試行してください。")
                     return

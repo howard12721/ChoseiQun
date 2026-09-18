@@ -64,9 +64,9 @@ export function HomePage({
           type="button"
           className="command-copy"
           aria-label="日程調整コマンドをコピー"
-          onClick={() => onCopy("@BOT_chosei イベント名")}
+          onClick={() => onCopy("@chosei イベント名")}
         >
-          <code>@BOT_chosei イベント名</code>
+          <code>@chosei イベント名</code>
           <Icon name="copy" />
         </button>
       </section>
